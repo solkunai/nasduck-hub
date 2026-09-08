@@ -1,11 +1,8 @@
-const ITEMS = [
-  { label: 'Fowl Play Tape', desc: 'live whale buy/sell feed' },
-  { label: 'Top of Book', desc: 'holder leaderboard + diamond hands' },
-]
+const ITEMS = [{ label: 'Fowl Play Tape', desc: 'live whale buy/sell feed' }]
 
-// These two need a Helius webhook listener that doesn't exist yet — the
-// rest of Phase 2 (PnL, meme wall, clicker game) shipped and moved off this
-// list. Shown here so the page is honest about what's still coming.
+// Last thing standing on this list — needs a Helius webhook listener that
+// doesn't exist yet, unlike everything else in Phase 2 which only needed
+// tables+RLS+storage. Shown here so the page is honest about what's coming.
 export function ComingSoonStrip() {
   return (
     <div className="mx-auto max-w-[1240px] px-5 py-9">

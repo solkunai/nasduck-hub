@@ -5,6 +5,7 @@ import { MissionControl } from '../components/MissionControl'
 import { PriceChart } from '../components/PriceChart'
 import { SwapWidget } from '../components/SwapWidget'
 import { PnlCard } from '../components/PnlCard'
+import { Leaderboard } from '../components/Leaderboard'
 import { MemeWall } from '../components/MemeWall'
 import { ClickerGame } from '../components/ClickerGame'
 import { Memo } from '../components/Memo'
@@ -23,6 +24,7 @@ export function Landing() {
         <SwapWidget />
       </div>
       <PnlCard />
+      <Leaderboard />
       <MemeWall />
       <ClickerGame />
       <ComingSoonStrip />
