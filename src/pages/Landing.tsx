@@ -4,6 +4,7 @@ import { Hero } from '../components/Hero'
 import { MissionControl } from '../components/MissionControl'
 import { PriceChart } from '../components/PriceChart'
 import { SwapWidget } from '../components/SwapWidget'
+import { PnlCard } from '../components/PnlCard'
 import { Memo } from '../components/Memo'
 import { ComingSoonStrip } from '../components/ComingSoonStrip'
 import { Footer } from '../components/layout/Footer'
@@ -19,6 +20,7 @@ export function Landing() {
         <PriceChart />
         <SwapWidget />
       </div>
+      <PnlCard />
       <ComingSoonStrip />
       <Memo />
       <Footer />

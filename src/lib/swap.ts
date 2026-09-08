@@ -21,7 +21,10 @@ const EXECUTE_URL = 'https://lite-api.jup.ag/ultra/v1/execute'
 // (SOL > stablecoins > LSTs > bluechips > everything else), and SOL is on
 // every NASDUCK trade regardless of direction — so SOL always wins and a
 // NASDUCK-denominated referral token account is never needed.
-const REFERRAL_ACCOUNT = import.meta.env.VITE_JUP_REFERRAL_ACCOUNT ?? NASDUCK_REFERRAL_ACCOUNT
+// `||` not `??` — same empty-string-from-.env footgun as WalletProvider's
+// RPC_ENDPOINT. Here it wouldn't crash, just silently send an empty
+// referralAccount on every order and quietly defeat fee collection.
+const REFERRAL_ACCOUNT = import.meta.env.VITE_JUP_REFERRAL_ACCOUNT || NASDUCK_REFERRAL_ACCOUNT
 
 export interface JupiterOrder {
   requestId: string

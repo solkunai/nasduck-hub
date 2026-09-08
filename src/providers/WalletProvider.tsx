@@ -13,7 +13,12 @@ import '@solana/wallet-adapter-react-ui/styles.css'
 // RPC already handles fine, so no proxy is needed for swaps specifically.
 // Still worth a dedicated RPC endpoint later if read volume grows enough to
 // hit the public endpoint's own rate limits.
-const RPC_ENDPOINT = import.meta.env.VITE_RPC_URL ?? 'https://api.mainnet-beta.solana.com'
+// `||` not `??`: a real .env file (copied from .env.example, which lists
+// every var with an empty default like `VITE_RPC_URL=`) sets this to `""`,
+// not undefined — `??` only falls back on null/undefined, so it would try
+// to open a Connection against an empty string and crash the whole app.
+// Confirmed live: exactly this happened on first real .env setup.
+const RPC_ENDPOINT = import.meta.env.VITE_RPC_URL || 'https://api.mainnet-beta.solana.com'
 
 export function SolanaProviders({ children }: { children: ReactNode }) {
   // Phantom, Solflare, Backpack and any Wallet Standard wallet self-register
