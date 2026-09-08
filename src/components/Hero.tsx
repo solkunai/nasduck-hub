@@ -10,7 +10,6 @@ export function Hero() {
   const chgClass = up ? 'text-up' : 'text-down'
 
   const mascotAnim = up ? (m.change24h > 20 ? 'animate-ndPump' : 'animate-ndFloat') : 'animate-ndDip'
-  const mascotState = up ? (m.change24h > 20 ? 'SENDING IT' : 'MILDLY BULLISH') : 'TAKING A DIP'
   const auraColor = up ? 'rgba(111,190,68,.22)' : 'rgba(232,67,79,.2)'
 
   function copyCa() {
@@ -22,10 +21,6 @@ export function Hero() {
   return (
     <div className="mx-auto grid max-w-[1240px] items-center gap-9 px-5 pb-5 pt-11 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
       <div className="min-w-0">
-        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-line px-3 py-1.5 font-mono text-[11px] tracking-wide text-ink-faint">
-          <span className="h-1.5 w-1.5 animate-ndPulse rounded-full bg-up" />
-          DESK IS LIVE
-        </div>
         <h1 className="mb-4 font-display text-[clamp(38px,6.2vw,74px)] leading-[0.95] tracking-tighter text-ink-primary text-balance">
           FIRED FROM
           <br />
@@ -103,9 +98,6 @@ export function Hero() {
             alt="NASDUCK mascot"
             className={`relative w-4/5 rounded-full shadow-[0_24px_60px_rgba(0,0,0,.55)] ${mascotAnim}`}
           />
-        </div>
-        <div className={`rounded-full border border-line bg-panel px-3.5 py-1.5 font-mono text-[11.5px] tracking-wide ${chgClass}`}>
-          ADVISOR STATUS: {mascotState}
         </div>
       </div>
     </div>

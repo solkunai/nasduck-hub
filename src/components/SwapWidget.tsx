@@ -112,12 +112,11 @@ export function SwapWidget() {
             className="min-w-0 flex-1 bg-transparent font-mono text-[26px] font-bold text-ink-primary outline-none"
           />
           <div className="flex items-center gap-1.5 rounded-full border border-line bg-input py-1.5 pl-2 pr-3 font-mono text-[13px] text-ink-secondary">
-            <span
-              className="h-[18px] w-[18px] rounded-full"
-              style={{ background: side === 'BUY' ? 'linear-gradient(135deg,#9945FF,#14F195)' : undefined }}
-            >
-              {side === 'SELL' && <img src="/mascot/nasduck-logo.jpg" className="h-full w-full rounded-full object-cover" alt="" />}
-            </span>
+            {side === 'BUY' ? (
+              <img src="/icons/solana.png" alt="" className="h-[18px] w-[18px] object-contain" />
+            ) : (
+              <img src="/mascot/nasduck-logo.jpg" alt="" className="h-[18px] w-[18px] rounded-full object-cover" />
+            )}
             {side === 'BUY' ? 'SOL' : 'DUCK'}
           </div>
         </div>
@@ -151,7 +150,7 @@ export function SwapWidget() {
             {side === 'BUY' ? (
               <img src="/mascot/nasduck-logo.jpg" alt="" className="h-5 w-5 rounded-full object-cover" />
             ) : (
-              <span className="h-5 w-5 rounded-full" style={{ background: 'linear-gradient(135deg,#9945FF,#14F195)' }} />
+              <img src="/icons/solana.png" alt="" className="h-5 w-5 object-contain" />
             )}
             {side === 'BUY' ? 'DUCK' : 'SOL'}
           </div>
