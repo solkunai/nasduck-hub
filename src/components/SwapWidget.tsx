@@ -115,7 +115,7 @@ export function SwapWidget() {
             {side === 'BUY' ? (
               <img src="/icons/solana.png" alt="" className="h-[18px] w-[18px] object-contain" />
             ) : (
-              <img src="/mascot/nasduck-logo.jpg" alt="" className="h-[18px] w-[18px] rounded-full object-cover" />
+              <img src="/mascot/nasduck-pfp.jpg" alt="" className="h-[18px] w-[18px] rounded-full object-cover" />
             )}
             {side === 'BUY' ? 'SOL' : 'DUCK'}
           </div>
@@ -148,7 +148,7 @@ export function SwapWidget() {
           </div>
           <div className="flex items-center gap-1.5 rounded-full border border-line bg-input py-1.5 pl-1.5 pr-3 font-mono text-[13px]">
             {side === 'BUY' ? (
-              <img src="/mascot/nasduck-logo.jpg" alt="" className="h-5 w-5 rounded-full object-cover" />
+              <img src="/mascot/nasduck-pfp.jpg" alt="" className="h-5 w-5 rounded-full object-cover" />
             ) : (
               <img src="/icons/solana.png" alt="" className="h-5 w-5 object-contain" />
             )}
