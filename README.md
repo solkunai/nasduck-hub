@@ -25,8 +25,12 @@ back to a fee-less order automatically), they just don't collect the fee yet. To
 
 1. Go to [referral.jup.ag](https://referral.jup.ag), connect the fee wallet
    (`AWJKACzdHpnumGnF1qiwSS1gnXX1sscL89Mhm83akFCn`), and create a Referral Account.
-2. Create a Referral Token Account for both SOL/WSOL and NASDUCK — a fee can land in either
-   depending on swap direction.
+2. Create a Referral Token Account for **SOL only**. Confirmed directly against Jupiter's
+   `/ultra/v1/fees` endpoint: fee-mint selection follows a fixed priority order (SOL >
+   stablecoins > LSTs > bluechips > everything else), and SOL is on every NASDUCK trade
+   regardless of direction — so SOL always wins and NASDUCK is never selected as the fee mint.
+   That's also why NASDUCK doesn't appear as an option in the dashboard's token picker — it's
+   correctly not offered, not broken.
 3. Nothing else to do — `src/lib/swap.ts` already sends `referralAccount`/`referralFee` on every
    order and the 0.5% fee starts applying automatically once the account exists.
 

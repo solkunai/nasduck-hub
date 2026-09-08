@@ -14,11 +14,14 @@ const ORDER_URL = 'https://lite-api.jup.ag/ultra/v1/order'
 const EXECUTE_URL = 'https://lite-api.jup.ag/ultra/v1/execute'
 
 // referral.jup.ag: one-time setup — create a Referral Account for FEE_WALLET,
-// then a Referral Token Account for each mint fees may be collected in
-// (SOL/WSOL and NASDUCK, since a fee can land in either depending on swap
-// direction). Until that's done, /order still succeeds but silently returns
-// feeBps=0 (see the mismatch check in fetchOrder below) — no fee is broken,
-// it just isn't collected yet.
+// then a Referral Token Account for SOL only. Confirmed directly against
+// Jupiter's /ultra/v1/fees endpoint: fee-mint selection follows a fixed
+// priority order (SOL > stablecoins > LSTs > bluechips > everything else),
+// and SOL is on every NASDUCK trade regardless of direction — so SOL always
+// wins and a NASDUCK-denominated referral token account is never used (and
+// correctly doesn't show up as an option in the dashboard). Until the
+// Referral Account itself exists, /order doesn't just skip the fee — it
+// rejects the whole request (see the fallback in fetchOrder below).
 const REFERRAL_ACCOUNT = import.meta.env.VITE_JUP_REFERRAL_ACCOUNT ?? FEE_WALLET
 
 export interface JupiterOrder {
