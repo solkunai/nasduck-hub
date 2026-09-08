@@ -1,5 +1,5 @@
 import { VersionedTransaction, type PublicKey } from '@solana/web3.js'
-import { FEE_WALLET, FEE_BPS } from './nasduck'
+import { FEE_WALLET, FEE_BPS, WSOL_MINT } from './nasduck'
 
 // Jupiter's Ultra API, not the classic quote/v1+swap/v1 pair ANSEM Hub used.
 // Two reasons: (1) ANSEM Hub proved on-chain that the classic endpoints'
@@ -76,13 +76,32 @@ export async function fetchOrder(
 
   if (!ok) throw new Error(raw.error ?? `order ${status}`)
 
-  const feeBps = raw.feeBps != null ? Number(raw.feeBps) : 0
-  if (feeBps !== FEE_BPS) {
-    // Order still executes fine without the fee — this just means the
-    // referral token account for this route's fee mint isn't set up yet
-    // (a softer, per-mint version of the same setup step above).
+  let feeBps = raw.feeBps != null ? Number(raw.feeBps) : 0
+  let feeMint: string | null = raw.feeMint ?? null
+
+  // Hard requirement, not just an expectation: the fee must only ever be
+  // collected in SOL, never NASDUCK — confirmed Jupiter's own fee-mint
+  // priority (SOL > stablecoins > LSTs > bluechips > others) already
+  // guarantees this for a SOL/NASDUCK pair, but assert it in code rather
+  // than just trusting that behavior holds forever. If a fee is somehow
+  // about to land in anything other than SOL, refuse it — refetch a plain
+  // order with no referral params rather than let a NASDUCK-denominated fee
+  // through.
+  if (feeBps > 0 && feeMint && feeMint !== WSOL_MINT) {
     console.warn(
-      `[swap] expected ${FEE_BPS}bps referral fee, got ${feeBps}bps — referral token account for the fee mint may not be initialized yet at referral.jup.ag`,
+      `[swap] fee would be collected in ${feeMint}, not SOL — refusing and refetching a fee-less order instead. This should never happen for a SOL/NASDUCK pair; investigate if it does.`,
+    )
+    const plain = await requestOrder(baseParams)
+    if (!plain.ok) throw new Error(plain.raw.error ?? `order ${plain.status}`)
+    raw = plain.raw
+    feeBps = 0
+    feeMint = null
+  } else if (feeBps !== FEE_BPS) {
+    // Order still executes fine without the fee — this just means the
+    // referral token account for SOL isn't set up yet (a softer version of
+    // the same setup step above).
+    console.warn(
+      `[swap] expected ${FEE_BPS}bps referral fee, got ${feeBps}bps — the SOL referral token account may not be initialized yet at referral.jup.ag`,
     )
   }
 
@@ -92,7 +111,7 @@ export async function fetchOrder(
     outAmount: raw.outAmount != null ? Number(raw.outAmount) : 0,
     priceImpactPct: raw.priceImpactPct != null ? Number(raw.priceImpactPct) : 0,
     feeBps,
-    feeMint: raw.feeMint ?? null,
+    feeMint,
     raw,
   }
 }
