@@ -1,13 +1,11 @@
 const ITEMS = [
   { label: 'Fowl Play Tape', desc: 'live whale buy/sell feed' },
   { label: 'Top of Book', desc: 'holder leaderboard + diamond hands' },
-  { label: 'The Meme Desk', desc: 'community meme wall' },
-  { label: 'Feed the Duck', desc: 'clicker game + leaderboard' },
 ]
 
-// Phase 2 needs a real backend (Helius webhooks, Supabase, storage) — see
-// project notes. Shown here so the page is honest about what's coming rather
-// than silently missing pieces we already scoped and agreed on.
+// These two need a Helius webhook listener that doesn't exist yet — the
+// rest of Phase 2 (PnL, meme wall, clicker game) shipped and moved off this
+// list. Shown here so the page is honest about what's still coming.
 export function ComingSoonStrip() {
   return (
     <div className="mx-auto max-w-[1240px] px-5 py-9">
