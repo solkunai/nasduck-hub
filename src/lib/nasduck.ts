@@ -20,6 +20,15 @@ export const NASDUCK_X = 'https://x.com/NASDUCKOTC'
 export const FEE_WALLET = 'AWJKACzdHpnumGnF1qiwSS1gnXX1sscL89Mhm83akFCn'
 export const FEE_BPS = 50 // 0.5%
 
+// The address Jupiter's /order calls use is a separate on-chain Referral
+// Account, not FEE_WALLET itself — Jupiter derives/creates this account
+// when FEE_WALLET connects at referral.jup.ag and creates a Referral
+// Account there. Confirmed directly from the user's own dashboard after
+// connecting FEE_WALLET. A SOL Referral Token Account has already been
+// created under this account (fees always land in SOL for a SOL/NASDUCK
+// pair — see the priority-order check in lib/swap.ts).
+export const REFERRAL_ACCOUNT = 'HszE2CwtT7buhNhxHqJUcj2iSXimRywzTuqnR5HgdGJ4'
+
 export const MCAP_GOAL = 100_000_000
 export const HOLDER_GOAL = 100_000
 

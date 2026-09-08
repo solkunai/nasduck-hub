@@ -1,5 +1,5 @@
 import { VersionedTransaction, type PublicKey } from '@solana/web3.js'
-import { FEE_WALLET, FEE_BPS, WSOL_MINT } from './nasduck'
+import { FEE_BPS, REFERRAL_ACCOUNT as NASDUCK_REFERRAL_ACCOUNT, WSOL_MINT } from './nasduck'
 
 // Jupiter's Ultra API, not the classic quote/v1+swap/v1 pair ANSEM Hub used.
 // Two reasons: (1) ANSEM Hub proved on-chain that the classic endpoints'
@@ -13,16 +13,15 @@ import { FEE_WALLET, FEE_BPS, WSOL_MINT } from './nasduck'
 const ORDER_URL = 'https://lite-api.jup.ag/ultra/v1/order'
 const EXECUTE_URL = 'https://lite-api.jup.ag/ultra/v1/execute'
 
-// referral.jup.ag: one-time setup — create a Referral Account for FEE_WALLET,
-// then a Referral Token Account for SOL only. Confirmed directly against
-// Jupiter's /ultra/v1/fees endpoint: fee-mint selection follows a fixed
-// priority order (SOL > stablecoins > LSTs > bluechips > everything else),
-// and SOL is on every NASDUCK trade regardless of direction — so SOL always
-// wins and a NASDUCK-denominated referral token account is never used (and
-// correctly doesn't show up as an option in the dashboard). Until the
-// Referral Account itself exists, /order doesn't just skip the fee — it
-// rejects the whole request (see the fallback in fetchOrder below).
-const REFERRAL_ACCOUNT = import.meta.env.VITE_JUP_REFERRAL_ACCOUNT ?? FEE_WALLET
+// referral.jup.ag setup is done (see lib/nasduck.ts for the resulting
+// Referral Account address — note it's a distinct on-chain account Jupiter
+// creates for FEE_WALLET, not FEE_WALLET's own pubkey). A SOL Referral Token
+// Account is created under it too. Confirmed directly against Jupiter's
+// /ultra/v1/fees endpoint: fee-mint selection follows a fixed priority order
+// (SOL > stablecoins > LSTs > bluechips > everything else), and SOL is on
+// every NASDUCK trade regardless of direction — so SOL always wins and a
+// NASDUCK-denominated referral token account is never needed.
+const REFERRAL_ACCOUNT = import.meta.env.VITE_JUP_REFERRAL_ACCOUNT ?? NASDUCK_REFERRAL_ACCOUNT
 
 export interface JupiterOrder {
   requestId: string

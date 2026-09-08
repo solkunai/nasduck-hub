@@ -14,25 +14,30 @@ cp .env.example .env   # optional — sensible defaults work without it
 npm run dev
 ```
 
-## One-time manual step: Jupiter Referral Account
+## Jupiter Referral Account — done
 
 Swaps route through Jupiter's Ultra API (`/ultra/v1/order` + `/ultra/v1/execute`) and take a
 0.5% fee via Jupiter's **Referral Program** — not the classic `feeAccount`/`platformFeeBps`
 mechanism, which was confirmed broken on-chain for at least one real route on a prior project.
 
-Until a Referral Account exists for the fee wallet, quotes and swaps still work (the code falls
-back to a fee-less order automatically), they just don't collect the fee yet. To activate it:
+The fee wallet (`AWJKACzdHpnumGnF1qiwSS1gnXX1sscL89Mhm83akFCn`) has connected to
+[referral.jup.ag](https://referral.jup.ag) and created its Referral Account. **Important:**
+Jupiter creates a *separate* on-chain account for the Referral Account itself — it is not the
+same address as the fee wallet. The real one, already wired into `src/lib/nasduck.ts` as
+`REFERRAL_ACCOUNT`, is `HszE2CwtT7buhNhxHqJUcj2iSXimRywzTuqnR5HgdGJ4`.
 
-1. Go to [referral.jup.ag](https://referral.jup.ag), connect the fee wallet
-   (`AWJKACzdHpnumGnF1qiwSS1gnXX1sscL89Mhm83akFCn`), and create a Referral Account.
-2. Create a Referral Token Account for **SOL only**. Confirmed directly against Jupiter's
-   `/ultra/v1/fees` endpoint: fee-mint selection follows a fixed priority order (SOL >
-   stablecoins > LSTs > bluechips > everything else), and SOL is on every NASDUCK trade
-   regardless of direction — so SOL always wins and NASDUCK is never selected as the fee mint.
-   That's also why NASDUCK doesn't appear as an option in the dashboard's token picker — it's
-   correctly not offered, not broken.
-3. Nothing else to do — `src/lib/swap.ts` already sends `referralAccount`/`referralFee` on every
-   order and the 0.5% fee starts applying automatically once the account exists.
+A Referral Token Account for **SOL only** has also been created. This is the only one needed:
+confirmed directly against Jupiter's `/ultra/v1/fees` endpoint that fee-mint selection follows a
+fixed priority order (SOL > stablecoins > LSTs > bluechips > everything else), and SOL is on
+every NASDUCK trade regardless of direction — so SOL always wins and NASDUCK is never selected as
+the fee mint (nor does it need to be — the fee is meant to only ever be paid in SOL). `fetchOrder`
+in `src/lib/swap.ts` also enforces this in code: if Jupiter ever returned a fee in anything other
+than SOL, it refuses it and refetches a fee-less order rather than let it through.
+
+With both pieces in place, the 0.5% fee should now be live on every swap. If `/order` still fails
+for any reason, `fetchOrder` falls back to a fee-less order automatically so the swap widget keeps
+working either way — check the browser console for a `[swap]`-prefixed warning if fees stop
+flowing to explain why.
 
 ## Status
 
