@@ -41,8 +41,8 @@ flowing to explain why.
 
 ## Supabase backend
 
-New Supabase project (`qrqenowwwccmfgwsnfpa`, separate from ANSEM Hub's own project) backs all of
-Phase 2. Two Edge Function secrets set via the dashboard (Project Settings → Edge Functions →
+A separate Supabase project from ANSEM Hub's own backs all of Phase 2. Two Edge Function secrets
+set via the dashboard (Project Settings → Edge Functions →
 Secrets): `HELIUS_RPC_URL` (accepts either a bare API key or a full RPC URL — no particular format
 required) and `CRON_SECRET` (a project-generated random string, not a third-party credential —
 reused as the shared secret for both the holder-snapshot cron job and the Helius webhook's auth
