@@ -29,6 +29,14 @@ export const FEE_BPS = 50 // 0.5%
 // pair — see the priority-order check in lib/swap.ts).
 export const REFERRAL_ACCOUNT = 'HszE2CwtT7buhNhxHqJUcj2iSXimRywzTuqnR5HgdGJ4'
 
+// Public-safe project identifiers (URL + publishable key, not the account
+// Personal Access Token — see lib/supabase.ts). Hardcoded as the default so
+// a fresh deploy (Vercel or otherwise) works without a required dashboard
+// env var step, same convention as REFERRAL_ACCOUNT/FEE_WALLET above;
+// VITE_SUPABASE_* still overrides these if set.
+export const SUPABASE_URL = 'https://qrqenowwwccmfgwsnfpa.supabase.co'
+export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_8in3GY7CIf71OL_PUZv_-Q_JIXeKa4q'
+
 export const MCAP_GOAL = 100_000_000
 export const HOLDER_GOAL = 100_000
 
