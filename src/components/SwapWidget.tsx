@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useWallet } from '@solana/wallet-adapter-react'
-import { useWalletModal } from '@solana/wallet-adapter-react-ui'
+import { useActiveWallet } from '../hooks/useActiveWallet'
 import { useMarket } from '../providers/MarketProvider'
 import { useJupiterOrder } from '../hooks/useJupiterOrder'
 import { useBalances } from '../hooks/useBalances'
@@ -17,8 +16,7 @@ type Side = 'BUY' | 'SELL'
 type TxState = { status: 'idle' | 'pending' | 'success' | 'error'; message?: string; signature?: string | null }
 
 export function SwapWidget() {
-  const { publicKey, connected, signTransaction } = useWallet()
-  const { setVisible } = useWalletModal()
+  const { publicKey, connected, signTransaction, login } = useActiveWallet()
   const market = useMarket()
   const balances = useBalances()
 
@@ -65,7 +63,7 @@ export function SwapWidget() {
 
   async function handleSwap() {
     if (!connected || !publicKey) {
-      setVisible(true)
+      login()
       return
     }
     if (!order || !signTransaction) return

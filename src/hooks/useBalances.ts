@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { PublicKey } from '@solana/web3.js'
+import { connection } from '../lib/connection'
 import { NASDUCK_MINT } from '../lib/nasduck'
+import { useActiveWallet } from './useActiveWallet'
 
 export interface Balances {
   sol: number
@@ -12,8 +13,7 @@ export interface Balances {
 const NASDUCK_PUBKEY = new PublicKey(NASDUCK_MINT)
 
 export function useBalances(): Balances {
-  const { connection } = useConnection()
-  const { publicKey } = useWallet()
+  const { publicKey } = useActiveWallet()
   const [balances, setBalances] = useState<Omit<Balances, 'error'>>({ sol: 0, nasduck: 0 })
   const [error, setError] = useState<string | null>(null)
 

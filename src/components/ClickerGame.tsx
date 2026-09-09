@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useWallet } from '@solana/wallet-adapter-react'
+import { useActiveWallet } from '../hooks/useActiveWallet'
 import { useClickerGame } from '../hooks/useClickerGame'
 import { shortenAddress, formatNumber } from '../lib/format'
 
@@ -18,7 +18,7 @@ function playQuack() {
 }
 
 export function ClickerGame() {
-  const { publicKey, connected } = useWallet()
+  const { publicKey, connected } = useActiveWallet()
   const wallet = publicKey?.toBase58() ?? null
   const { score, leaders, feed } = useClickerGame(wallet)
   const [open, setOpen] = useState(false)

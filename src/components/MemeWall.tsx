@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
-import { useWallet } from '@solana/wallet-adapter-react'
-import { useWalletModal } from '@solana/wallet-adapter-react-ui'
+import { useActiveWallet } from '../hooks/useActiveWallet'
 import { useMemeWall, type Meme } from '../hooks/useMemeWall'
 import { formatTimeAgo } from '../lib/format'
 import { shareImageToX } from '../lib/share'
@@ -19,8 +18,7 @@ function shareTextFor(meme: Meme): string {
 }
 
 export function MemeWall() {
-  const { publicKey, connected } = useWallet()
-  const { setVisible } = useWalletModal()
+  const { publicKey, connected, login } = useActiveWallet()
   const wallet = publicKey?.toBase58() ?? null
   const { memes, heroMeme, myVotes, sort, setSort, loading, error, voteError, upvote, report, upload } = useMemeWall(wallet)
 
@@ -30,7 +28,7 @@ export function MemeWall() {
 
   function handleUploadClick() {
     if (!connected) {
-      setVisible(true)
+      login()
       return
     }
     fileInputRef.current?.click()

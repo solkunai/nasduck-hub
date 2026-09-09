@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useWallet } from '@solana/wallet-adapter-react'
+import { useActiveWallet } from '../hooks/useActiveWallet'
 import { useWalletTrades, type WalletTrades } from '../hooks/useWalletTrades'
 import { useMarket } from '../providers/MarketProvider'
 import { formatUsdCompact, formatPercent, formatTokenAmount } from '../lib/format'
@@ -35,7 +35,7 @@ function computePnl(data: WalletTrades, price: number, solPrice: number) {
 }
 
 export function PnlCard() {
-  const { publicKey, connected } = useWallet()
+  const { publicKey, connected } = useActiveWallet()
   const { data, loading, error, fetchTrades } = useWalletTrades()
   const market = useMarket()
 

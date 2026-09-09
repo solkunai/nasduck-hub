@@ -1,6 +1,6 @@
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { NASDUCK_X } from '../../lib/nasduck'
 import { NavMenu } from './NavMenu'
+import { WalletMenu } from './WalletMenu'
 
 // Scrolls to top and drops any section hash (#swap etc.) from the URL
 // instead of a plain href="/", which would trigger a full page reload —
@@ -48,19 +48,7 @@ export function Header() {
           >
             @NASDUCKOTC
           </a>
-          <WalletMultiButton
-            style={{
-              background: '#0E2140',
-              border: '1px solid #1E3A66',
-              borderRadius: 8,
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 12,
-              height: 38,
-              whiteSpace: 'nowrap',
-              paddingLeft: 12,
-              paddingRight: 12,
-            }}
-          />
+          <WalletMenu />
           <a
             href="#swap"
             className="whitespace-nowrap rounded-lg bg-brand px-3 py-2 font-display text-[13px] text-bg transition-colors hover:bg-brand-hover sm:px-4"

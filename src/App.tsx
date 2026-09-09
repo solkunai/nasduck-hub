@@ -1,13 +1,13 @@
-import { SolanaProviders } from './providers/WalletProvider'
+import { AppProviders } from './providers/PrivyProviders'
 import { MarketProvider } from './providers/MarketProvider'
 import { Landing } from './pages/Landing'
 
 export default function App() {
   return (
-    <SolanaProviders>
+    <AppProviders>
       <MarketProvider>
         <Landing />
       </MarketProvider>
-    </SolanaProviders>
+    </AppProviders>
   )
 }
