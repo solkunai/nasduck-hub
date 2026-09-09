@@ -88,7 +88,7 @@ export function SwapWidget() {
   return (
     <div className="max-w-[420px] rounded-2xl border border-line-strong bg-gradient-to-b from-[#12294F] to-panel-deep p-[18px] shadow-[0_0_0_1px_rgba(245,145,30,.14),0_20px_50px_rgba(0,0,0,.45)]">
       <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2.5">
-        <div className="font-display text-[17px] text-ink-primary">OTC DESK</div>
+        <div className="font-display text-[17px] text-ink-primary">THE TERMINAL</div>
         <div className="rounded-full border border-line px-2 py-1 font-mono text-[10px] text-ink-faint">
           JUPITER AGGREGATED
         </div>
