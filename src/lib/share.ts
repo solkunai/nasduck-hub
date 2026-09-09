@@ -18,9 +18,10 @@ export type ShareResult = 'native' | 'intent'
 //    the user's downloads, ready to drag into the compose box) AND open
 //    X's tweet-intent with the caption prefilled — closes the gap as much
 //    as a web page honestly can.
-export async function shareMemeToX(imageUrl: string, caption: string, filename: string): Promise<ShareResult> {
-  const text = caption ? `${caption} $NASDUCK` : '$NASDUCK'
-
+// Not meme-specific despite the module's origin — also used for sharing the
+// mascot image itself. `text` is whatever caption/label makes sense for
+// what's being shared.
+export async function shareImageToX(imageUrl: string, text: string, filename: string): Promise<ShareResult> {
   if (navigator.share && navigator.canShare) {
     try {
       const res = await fetch(imageUrl)

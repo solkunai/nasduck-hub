@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMarket } from '../providers/MarketProvider'
 import { NASDUCK_MINT } from '../lib/nasduck'
 import { formatPrice, formatPercent } from '../lib/format'
+import { DownloadShareButton } from './DownloadShareButton'
 
 export function Hero() {
   const m = useMarket()
@@ -106,6 +107,13 @@ export function Hero() {
             className={`relative w-4/5 rounded-full shadow-[0_24px_60px_rgba(0,0,0,.55)] ${mascotAnim}`}
           />
         </div>
+        <DownloadShareButton
+          imageUrl="/mascot/nasduck-logo.jpg"
+          filename="nasduck-mascot.jpg"
+          shareText="the official $NASDUCK mascot — fired from Wall Street, hired by degens"
+          label="⬇ DOWNLOAD THE DUCK"
+          className="rounded-[10px] bg-brand px-7 py-3.5 font-display text-[15px] text-bg transition-all hover:-translate-y-0.5 hover:bg-brand-hover"
+        />
       </div>
     </div>
   )

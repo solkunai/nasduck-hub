@@ -23,7 +23,13 @@ export function SwapWidget() {
   const balances = useBalances()
 
   const [side, setSide] = useState<Side>('BUY')
-  const [amountStr, setAmountStr] = useState('1.0')
+  // Was hardcoded to '1.0' (1 SOL) — confirmed live this broke the widget
+  // for anyone with less than 1 SOL: Jupiter's Ultra API validates the
+  // order against the connected wallet's real balance and correctly
+  // rejects it as insufficient, which is most casual wallets, not an edge
+  // case. Empty means no quote is requested until the user actually enters
+  // or picks an amount.
+  const [amountStr, setAmountStr] = useState('')
   const [tx, setTx] = useState<TxState>({ status: 'idle' })
 
   const inputMint = side === 'BUY' ? WSOL_MINT : NASDUCK_MINT
@@ -102,14 +108,15 @@ export function SwapWidget() {
       <div className="rounded-[10px] border border-line bg-bg p-3.5">
         <div className="flex justify-between font-mono text-[10.5px] text-ink-faint">
           <span>YOU PAY</span>
-          <span>BAL {side === 'BUY' ? balances.sol.toFixed(3) : formatTokenAmount(balances.nasduck)}</span>
+          <span>BAL {balances.error ? '—' : side === 'BUY' ? balances.sol.toFixed(3) : formatTokenAmount(balances.nasduck)}</span>
         </div>
         <div className="mt-2 flex items-center gap-2.5">
           <input
             value={amountStr}
             onChange={(e) => setAmountStr(e.target.value)}
             inputMode="decimal"
-            className="min-w-0 flex-1 bg-transparent font-mono text-[26px] font-bold text-ink-primary outline-none"
+            placeholder="0.0"
+            className="min-w-0 flex-1 bg-transparent font-mono text-[26px] font-bold text-ink-primary outline-none placeholder:text-ink-dim"
           />
           <div className="flex items-center gap-1.5 rounded-full border border-line bg-input py-1.5 pl-2 pr-3 font-mono text-[13px] text-ink-secondary">
             {side === 'BUY' ? (
@@ -178,6 +185,9 @@ export function SwapWidget() {
         </div>
       </div>
 
+      {balances.error && (
+        <div className="mb-2 font-mono text-[11px] text-down">balance check failed: {balances.error}</div>
+      )}
       {error && <div className="mb-2 font-mono text-[11px] text-down">{error}</div>}
       {tx.status === 'error' && <div className="mb-2 font-mono text-[11px] text-down">{tx.message}</div>}
       {tx.status === 'success' && (

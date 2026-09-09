@@ -6,6 +6,7 @@ import { NASDUCK_MINT } from '../lib/nasduck'
 export interface Balances {
   sol: number
   nasduck: number
+  error: string | null
 }
 
 const NASDUCK_PUBKEY = new PublicKey(NASDUCK_MINT)
@@ -13,11 +14,13 @@ const NASDUCK_PUBKEY = new PublicKey(NASDUCK_MINT)
 export function useBalances(): Balances {
   const { connection } = useConnection()
   const { publicKey } = useWallet()
-  const [balances, setBalances] = useState<Balances>({ sol: 0, nasduck: 0 })
+  const [balances, setBalances] = useState<Omit<Balances, 'error'>>({ sol: 0, nasduck: 0 })
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!publicKey) {
       setBalances({ sol: 0, nasduck: 0 })
+      setError(null)
       return
     }
     let cancelled = false
@@ -33,8 +36,14 @@ export function useBalances(): Balances {
           0,
         )
         setBalances({ sol: lamports / 1e9, nasduck })
-      } catch {
-        // keep last known balances on a transient RPC error
+        setError(null)
+      } catch (err) {
+        if (cancelled) return
+        // Keep the last known balances (better than snapping to 0 on a
+        // transient blip), but surface it — a silent failure here used to
+        // show BAL 0.000 forever with zero explanation, indistinguishable
+        // from "you have no SOL" to the user.
+        setError(err instanceof Error ? err.message : 'balance check failed')
       }
     }
     load()
@@ -45,5 +54,5 @@ export function useBalances(): Balances {
     }
   }, [connection, publicKey])
 
-  return balances
+  return { ...balances, error }
 }
