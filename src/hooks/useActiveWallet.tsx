@@ -1,31 +1,46 @@
-import { useCallback, useMemo } from 'react'
+import { createContext, useCallback, useContext, useMemo } from 'react'
 import { PublicKey, VersionedTransaction } from '@solana/web3.js'
-import { usePrivy } from '@privy-io/react-auth'
-import {
-  type ConnectedStandardSolanaWallet,
-  useExportWallet,
-  useSignTransaction,
-  useWallets,
+import type { usePrivy as UsePrivy } from '@privy-io/react-auth'
+import type {
+  ConnectedStandardSolanaWallet,
+  useExportWallet as UseExportWallet,
+  useSignTransaction as UseSignTransaction,
+  useWallets as UseWallets,
 } from '@privy-io/react-auth/solana'
 
-// Mirrors the check in providers/PrivyProviders.tsx: with no App ID
-// configured, <PrivyProvider> is never mounted at all, so Privy's own
-// hooks (usePrivy, useWallets, ...) aren't just "not authenticated" — they
-// throw, because there's no provider tree for them to read from. Confirmed
-// live: this crashed the whole page to blank white, not a graceful
-// "disconnected" state. `import.meta.env` is a Vite build-time constant, so
-// this never changes across a running app's lifetime — conditionally
-// calling the real hook below based on it doesn't violate rules-of-hooks
-// in practice, even though the linter can't prove that statically.
-const PRIVY_ENABLED = Boolean(import.meta.env.VITE_PRIVY_APP_ID)
+export interface ActiveWallet {
+  ready: boolean
+  connected: boolean
+  publicKey: PublicKey | null
+  signTransaction: ((tx: VersionedTransaction) => Promise<VersionedTransaction>) | undefined
+  login: () => void
+  logout: () => Promise<void>
+  isEmbedded: boolean
+  canExport: boolean
+  exportWallet: () => Promise<void>
+  email: string | null
+}
 
-const DISCONNECTED: ReturnType<typeof usePrivyWallet> = {
-  ready: true,
+// Privy's own SDK isn't mounted until providers/PrivyProviders.tsx finishes
+// dynamically importing it (deferred past first paint — see that file for
+// why: it adds ~2MB minified to the eager bundle otherwise, confirmed via a
+// real `vite build`, most of it EVM/WalletConnect code a Solana-only site
+// never touches). Every component that reads wallet state needs to work
+// correctly during that window too, not just after — this context is what
+// makes that safe: it's always readable with no provider required, so
+// nothing crashes or has to conditionally call a hook based on runtime
+// state (which real Privy hooks like usePrivy()/useWallets() don't support
+// — they throw with no <PrivyProvider> ancestor, confirmed live before this
+// existed). PrivyActiveWalletPublisher below is the only thing that ever
+// provides a non-default value, and it only mounts once Privy has actually
+// loaded and its own provider is up.
+const DISCONNECTED: ActiveWallet = {
+  ready: false,
   connected: false,
   publicKey: null,
   signTransaction: undefined,
   login: () => {
-    console.warn('[wallet] VITE_PRIVY_APP_ID is not configured — nobody can sign in yet.')
+    console.warn('[wallet] still loading — try again in a moment.')
   },
   logout: async () => {},
   isEmbedded: false,
@@ -34,23 +49,33 @@ const DISCONNECTED: ReturnType<typeof usePrivyWallet> = {
   email: null,
 }
 
-// Single place the rest of the app touches Privy. Every consumer that used
-// to call wallet-adapter's useWallet()/useWalletModal() now calls this
-// instead, getting back the same shape (publicKey, connected,
-// signTransaction) so SwapWidget/PnlCard/ClickerGame/MemeWall/useBalances
-// didn't need their own logic rewritten — only the import + a couple of
-// renames (setVisible(true) -> login()).
-export function useActiveWallet() {
-  // eslint-disable-next-line react-hooks/rules-of-hooks -- PRIVY_ENABLED is a
-  // build-time constant, see comment above.
-  return PRIVY_ENABLED ? usePrivyWallet() : DISCONNECTED
+const ActiveWalletContext = createContext<ActiveWallet>(DISCONNECTED)
+
+export function useActiveWallet(): ActiveWallet {
+  return useContext(ActiveWalletContext)
 }
 
-function usePrivyWallet() {
-  const { ready: privyReady, authenticated, login, logout, user } = usePrivy()
-  const { ready: walletsReady, wallets } = useWallets()
-  const { signTransaction: privySignTransaction } = useSignTransaction()
-  const { exportWallet: privyExportWallet } = useExportWallet()
+// Rendered only by PrivyProviders.tsx, only once its dynamic import of
+// @privy-io/react-auth (+ /solana) has resolved — every hook below is a
+// real Privy hook, safe here specifically because a <PrivyProvider> is
+// guaranteed to be mounted above this component by the time it renders.
+export function PrivyActiveWalletPublisher({
+  children,
+  usePrivyHook,
+  useWalletsHook,
+  useSignTransactionHook,
+  useExportWalletHook,
+}: {
+  children: React.ReactNode
+  usePrivyHook: typeof UsePrivy
+  useWalletsHook: typeof UseWallets
+  useSignTransactionHook: typeof UseSignTransaction
+  useExportWalletHook: typeof UseExportWallet
+}) {
+  const { ready: privyReady, authenticated, login, logout, user } = usePrivyHook()
+  const { ready: walletsReady, wallets } = useWalletsHook()
+  const { signTransaction: privySignTransaction } = useSignTransactionHook()
+  const { exportWallet: privyExportWallet } = useExportWalletHook()
 
   // A user can in principle have more than one Solana wallet linked
   // (embedded + an external one), but this app only ever acts on one at a
@@ -103,7 +128,7 @@ function usePrivyWallet() {
     await privyExportWallet({ address: wallet.address })
   }, [wallet, isEmbedded, privyExportWallet])
 
-  return {
+  const value: ActiveWallet = {
     ready: privyReady && walletsReady,
     connected,
     publicKey,
@@ -115,4 +140,6 @@ function usePrivyWallet() {
     exportWallet,
     email: user?.email?.address ?? null,
   }
+
+  return <ActiveWalletContext.Provider value={value}>{children}</ActiveWalletContext.Provider>
 }
