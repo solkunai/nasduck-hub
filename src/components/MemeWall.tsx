@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { useMemeWall, type Meme } from '../hooks/useMemeWall'
@@ -23,6 +23,11 @@ export function MemeWall() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+
+  // One toast at a time, owned here rather than per-button — a save always
+  // means "just this one meme, right now," so a single shared slot is
+  // simpler than every DownloadButton instance managing its own portal.
+  const [savedMeme, setSavedMeme] = useState<Meme | null>(null)
 
   function handleUploadClick() {
     if (!connected) {
@@ -106,7 +111,7 @@ export function MemeWall() {
                 ▲ {heroMeme.votes}
               </button>
               <ShareButton meme={heroMeme} />
-              <SaveButton meme={heroMeme} />
+              <DownloadButton meme={heroMeme} onSaved={setSavedMeme} />
             </div>
           </div>
         </div>
@@ -123,7 +128,15 @@ export function MemeWall() {
       {!loading && !error && memes.length > 0 && (
         <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]">
           {memes.map((meme) => (
-            <MemeCard key={meme.id} meme={meme} voted={myVotes.has(meme.id)} canVote={!!wallet} onUpvote={upvote} onReport={report} />
+            <MemeCard
+              key={meme.id}
+              meme={meme}
+              voted={myVotes.has(meme.id)}
+              canVote={!!wallet}
+              onUpvote={upvote}
+              onReport={report}
+              onSaved={setSavedMeme}
+            />
           ))}
         </div>
       )}
@@ -132,6 +145,44 @@ export function MemeWall() {
         Wallet-gated uploads publish instantly — no approval queue. Flag anything fowl and the desk reviews after the
         fact.
       </div>
+
+      {savedMeme && <SavedToast meme={savedMeme} onDismiss={() => setSavedMeme(null)} />}
+    </div>
+  )
+}
+
+function SavedToast({ meme, onDismiss }: { meme: Meme; onDismiss: () => void }) {
+  const [sharing, setSharing] = useState(false)
+
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 6000)
+    return () => clearTimeout(t)
+  }, [onDismiss])
+
+  async function handleShare() {
+    setSharing(true)
+    try {
+      await shareMemeToX(meme.imageUrl, meme.caption, filenameFor(meme))
+    } finally {
+      setSharing(false)
+      onDismiss()
+    }
+  }
+
+  return (
+    <div className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3.5 rounded-xl border border-line-strong bg-panel px-4 py-3.5 shadow-[0_12px_40px_rgba(0,0,0,.5)]">
+      <span className="text-lg">✅</span>
+      <div className="font-mono text-[12.5px] text-ink-secondary">meme saved — share it on X?</div>
+      <button
+        onClick={handleShare}
+        disabled={sharing}
+        className="whitespace-nowrap rounded-lg bg-brand px-3 py-1.5 font-display text-[11.5px] text-bg disabled:opacity-50"
+      >
+        {sharing ? 'OPENING…' : 'SHARE ON X'}
+      </button>
+      <button onClick={onDismiss} className="text-ink-dim hover:text-ink-muted" title="dismiss">
+        ✕
+      </button>
     </div>
   )
 }
@@ -164,33 +215,34 @@ function ShareButton({ meme, compact }: { meme: Meme; compact?: boolean }) {
   )
 }
 
-function SaveButton({ meme, compact }: { meme: Meme; compact?: boolean }) {
+function DownloadButton({ meme, compact, onSaved }: { meme: Meme; compact?: boolean; onSaved: (meme: Meme) => void }) {
   const [busy, setBusy] = useState(false)
-  async function handleSave() {
+  async function handleDownload() {
     setBusy(true)
     try {
       await downloadImage(meme.imageUrl, filenameFor(meme))
+      onSaved(meme)
     } catch {
-      // A failed download here just means "nothing happened" for the user —
-      // no state worth tracking for a save button, unlike votes/uploads.
+      // A failed download just means nothing happened — no separate error
+      // state worth building for a save button, unlike votes/uploads.
     } finally {
       setBusy(false)
     }
   }
   if (compact) {
     return (
-      <button onClick={handleSave} disabled={busy} title="save image" className="hover:text-brand disabled:opacity-50">
+      <button onClick={handleDownload} disabled={busy} title="download image" className="hover:text-brand disabled:opacity-50">
         ⬇
       </button>
     )
   }
   return (
     <button
-      onClick={handleSave}
+      onClick={handleDownload}
       disabled={busy}
       className="rounded-lg border border-line px-3.5 py-2.5 font-mono text-[12.5px] text-ink-muted hover:border-line-strong disabled:opacity-50"
     >
-      {busy ? 'SAVING…' : 'SAVE'}
+      {busy ? 'SAVING…' : 'DOWNLOAD'}
     </button>
   )
 }
@@ -201,12 +253,14 @@ function MemeCard({
   canVote,
   onUpvote,
   onReport,
+  onSaved,
 }: {
   meme: Meme
   voted: boolean
   canVote: boolean
   onUpvote: (id: number) => void
   onReport: (id: number) => void
+  onSaved: (meme: Meme) => void
 }) {
   const [reported, setReported] = useState(false)
   return (
@@ -229,7 +283,7 @@ function MemeCard({
             ▲ {meme.votes}
           </button>
           <div className="flex items-center gap-2.5 font-mono text-[11px] text-ink-dim">
-            <SaveButton meme={meme} compact />
+            <DownloadButton meme={meme} compact onSaved={onSaved} />
             <ShareButton meme={meme} compact />
             <span>{agoFrom(meme.createdAt)}</span>
             <button
