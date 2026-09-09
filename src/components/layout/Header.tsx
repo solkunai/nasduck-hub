@@ -1,5 +1,6 @@
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { NASDUCK_X } from '../../lib/nasduck'
+import { NavMenu } from './NavMenu'
 
 export function Header() {
   return (
@@ -18,6 +19,7 @@ export function Header() {
         </div>
         <div className="flex-1" />
         <div className="flex items-center gap-2">
+          <NavMenu />
           <a
             href={NASDUCK_X}
             target="_blank"

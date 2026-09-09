@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useClickerGame } from '../hooks/useClickerGame'
 import { shortenAddress, formatNumber } from '../lib/format'
@@ -24,8 +24,26 @@ export function ClickerGame() {
   const [open, setOpen] = useState(false)
   const [pressed, setPressed] = useState(false)
 
+  // Landing.tsx's hash-scroll effect gets a visitor to this section, but a
+  // collapsed accordion at the end of that scroll reads as broken — auto-
+  // open when arriving via the nav menu's "TAP THE DUCK" link specifically.
+  // Checking the hash once on mount only covers a fresh page load that
+  // already has the hash in the URL — confirmed live that it does NOT fire
+  // for the far more common case of clicking the nav link while already on
+  // the page (a same-page anchor click doesn't remount this component, so
+  // a mount-only effect never re-runs) — a 'hashchange' listener covers
+  // both cases with one check.
+  useEffect(() => {
+    function checkHash() {
+      if (window.location.hash === '#tap-the-duck') setOpen(true)
+    }
+    checkHash()
+    window.addEventListener('hashchange', checkHash)
+    return () => window.removeEventListener('hashchange', checkHash)
+  }, [])
+
   return (
-    <div className="mx-auto max-w-[1240px] px-5 pb-9">
+    <div id="tap-the-duck" className="mx-auto max-w-[1240px] scroll-mt-[110px] px-5 pb-9">
       <div className="overflow-hidden rounded-2xl border border-line bg-panel-deep">
         <button
           onClick={() => setOpen((o) => !o)}
