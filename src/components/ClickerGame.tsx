@@ -3,6 +3,20 @@ import { useWallet } from '@solana/wallet-adapter-react'
 import { useClickerGame } from '../hooks/useClickerGame'
 import { shortenAddress, formatNumber } from '../lib/format'
 
+// A fresh Audio instance per click, not one shared/reused element — lets
+// rapid clicks overlap into a little chorus of quacks instead of each click
+// cutting the previous one off mid-sound, which is what reusing a single
+// <audio> element would do.
+function playQuack() {
+  const audio = new Audio('/sfx/quack.mp3')
+  audio.volume = 0.5
+  audio.play().catch(() => {
+    // Autoplay restrictions don't apply here (this only ever fires from a
+    // real click), but browsers can still occasionally reject playback for
+    // other reasons — a missed quack isn't worth surfacing as an error.
+  })
+}
+
 export function ClickerGame() {
   const { publicKey, connected } = useWallet()
   const wallet = publicKey?.toBase58() ?? null
@@ -31,6 +45,7 @@ export function ClickerGame() {
               <button
                 onClick={() => {
                   feed()
+                  playQuack()
                   setPressed(true)
                   setTimeout(() => setPressed(false), 100)
                 }}
