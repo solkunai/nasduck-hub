@@ -123,7 +123,11 @@ export function MemeWall() {
       )}
 
       {!loading && !error && memes.length > 0 && (
-        <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]">
+        // Was a single auto-fill column with a 200px minimum — on mobile
+        // that only ever fit one full-width card per row, reading as an
+        // endless single-file scroll. Explicit column counts instead of
+        // minmax auto-fill guarantee 2-up even on a narrow phone.
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3.5 lg:grid-cols-4 xl:grid-cols-5">
           {memes.map((meme) => (
             <MemeCard key={meme.id} meme={meme} voted={myVotes.has(meme.id)} canVote={!!wallet} onUpvote={upvote} onReport={report} />
           ))}
@@ -185,24 +189,31 @@ function MemeCard({
       <div className="aspect-square border-b border-line bg-bg">
         <img src={meme.imageUrl} alt={meme.caption} className="h-full w-full object-cover" />
       </div>
-      <div className="p-3">
-        <div className="h-8 overflow-hidden font-mono text-[11.5px] leading-snug text-ink-secondary">
+      <div className="p-2 sm:p-3">
+        {/* Two-up on mobile leaves ~168px per card — every size below was
+            tuned against that, not just shrunk arbitrarily, so the footer
+            row (vote + download + share + report) fits on one line
+            without wrapping. The "ago" timestamp is the one thing dropped
+            entirely at that width rather than squeezed — least essential
+            piece of a compact card, still shown from sm: up where there's
+            room for it. */}
+        <div className="h-7 overflow-hidden font-mono text-[10px] leading-snug text-ink-secondary sm:h-8 sm:text-[11.5px]">
           {meme.caption || 'untitled'}
         </div>
-        <div className="mt-2.5 flex items-center justify-between gap-2">
+        <div className="mt-1.5 flex items-center justify-between gap-1.5 sm:mt-2.5 sm:gap-2">
           <button
             onClick={() => onUpvote(meme.id)}
             disabled={!canVote || voted}
-            className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 font-mono text-[11.5px] disabled:cursor-not-allowed ${
+            className={`flex items-center gap-1 rounded-md border px-1.5 py-1 font-mono text-[10px] disabled:cursor-not-allowed sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[11.5px] ${
               voted ? 'border-up bg-up text-bg' : 'border-line text-ink-muted hover:border-up hover:text-up'
             }`}
           >
             ▲ {meme.votes}
           </button>
-          <div className="flex items-center gap-2.5 font-mono text-[11px] text-ink-dim">
+          <div className="flex items-center gap-1.5 font-mono text-[11px] text-ink-dim sm:gap-2.5">
             <DownloadShareButton imageUrl={meme.imageUrl} filename={filenameFor(meme)} shareText={shareTextFor(meme)} compact />
             <ShareButton meme={meme} compact />
-            <span>{agoFrom(meme.createdAt)}</span>
+            <span className="hidden sm:inline">{agoFrom(meme.createdAt)}</span>
             <button
               onClick={() => {
                 if (!reported) {
