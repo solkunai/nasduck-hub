@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { NASDUCK_MINT, NASDUCK_X } from '../../lib/nasduck'
 
 export function Footer() {
@@ -44,10 +45,14 @@ export function Footer() {
           <div className="flex items-center gap-2.5">
             <img src="/mascot/nasduck-logo.jpg" alt="" className="h-7 w-7 rounded-full object-cover" />
             <div className="font-mono text-[11.5px] text-ink-faint">$NASDUCK · SOLANA · 2026</div>
-          </div>
-          <div className="max-w-[620px] font-mono text-[11px] leading-relaxed text-ink-dim">
-            $NASDUCK is a meme coin with no intrinsic value and no expectation of financial return.
-            Nothing here is investment advice — the advisor is a duck.
+            <div className="flex items-center gap-3 border-l border-line pl-3 font-mono text-[11px] text-ink-dim">
+              <Link to="/legal#terms" className="hover:text-ink-primary">
+                Terms
+              </Link>
+              <Link to="/legal#privacy" className="hover:text-ink-primary">
+                Privacy
+              </Link>
+            </div>
           </div>
         </div>
       </div>

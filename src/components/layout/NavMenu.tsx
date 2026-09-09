@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 const LINKS = [
   { href: '#swap', icon: '🎯', label: 'BUY $NASDUCK' },
@@ -11,6 +12,21 @@ const LINKS = [
 // diverge between the two.
 export function NavMenu() {
   const [open, setOpen] = useState(false)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const onLanding = location.pathname === '/'
+
+  // These links only find their target element on the Landing page — from
+  // /legal a bare #swap href would silently do nothing (no such element on
+  // that page), same issue fixed in Header's BUY button. Route home with
+  // the hash instead when elsewhere.
+  function handleClick(e: React.MouseEvent, href: string) {
+    setOpen(false)
+    if (!onLanding) {
+      e.preventDefault()
+      navigate(`/${href}`)
+    }
+  }
 
   return (
     <div className="relative">
@@ -39,7 +55,7 @@ export function NavMenu() {
               <a
                 key={link.href}
                 href={link.href}
-                onClick={() => setOpen(false)}
+                onClick={(e) => handleClick(e, link.href)}
                 className="flex items-center gap-2.5 px-4 py-3 font-mono text-[12.5px] text-ink-secondary hover:bg-panel-deep hover:text-ink-primary"
               >
                 <span>{link.icon}</span>
