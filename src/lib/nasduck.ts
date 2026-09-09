@@ -14,7 +14,7 @@ export const NASDUCK_X = 'https://x.com/NASDUCKOTC'
 
 // The fee cut on every swap goes here. Collected via Jupiter's Referral
 // Program (not the classic swap/v1 feeAccount param — see lib/swap.ts for
-// why: that mechanism was confirmed broken on-chain for a real ANSEM route
+// why: that mechanism was confirmed broken on-chain for a real route
 // during a prior build, so this project goes straight to the officially
 // supported mechanism instead of relearning that the hard way).
 export const FEE_WALLET = 'AWJKACzdHpnumGnF1qiwSS1gnXX1sscL89Mhm83akFCn'

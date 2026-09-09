@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
     // getTokenLargestAccounts caps at 20 by design (a Solana RPC limit, not
-    // a choice here) — same as ANSEM Hub's version. Filtering pools out of
+    // a choice here). Filtering pools out of
     // that fixed 20 means real-holder rank can end up under 20 rows; no way
     // to ask this RPC for "the next 20" to backfill, so that's accepted.
     const largest = await rpc(HELIUS_RPC_URL, 'getTokenLargestAccounts', [NASDUCK_MINT])

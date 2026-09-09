@@ -48,4 +48,4 @@ create policy "clicker_scores_public_read" on public.clicker_scores for select u
 
 grant select on public.clicker_scores to anon, authenticated;
 -- No insert/update policy at all — only the security-definer function above
--- may write, same lockdown ANSEM Hub uses for increment_contributor_points.
+-- may write, the same lockdown pattern used for equivalent point-increment functions.

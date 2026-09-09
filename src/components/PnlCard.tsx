@@ -8,7 +8,7 @@ import { formatUsdCompact, formatPercent, formatTokenAmount } from '../lib/forma
 // Holdings beyond that (pre-existing, airdropped, or bought before the
 // window) have no known cost basis — treating them as "free" would wildly
 // overstate unrealized PnL, so unrealized value/cost is capped to the
-// amount attributable to a tracked buy. Same math validated on ANSEM Hub.
+// amount attributable to a tracked buy.
 function computePnl(data: WalletTrades, price: number, solPrice: number) {
   const avgCost = data.nasduckBought > 0 ? data.costBasisSol / data.nasduckBought : 0
   const realizedPnlSol = data.proceedsSol - avgCost * data.nasduckSold

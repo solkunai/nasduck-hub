@@ -8,8 +8,8 @@ export const NASDUCK_MINT = '7Y7V1a4m2nWK7BMgbka5B4vR1pDvCK7yva3Hnrqkraze'
 // pAMMBay... (PumpSwap) owns 937nYYCP...essZK2H, NASDUCK's largest pool;
 // LBUZKh... (Meteora DLMM) owns 3vnFSkGU...UdJAeA, its second largest.
 // The rest are long-established, widely-documented Solana DEX program IDs
-// (Jupiter Aggregator v6 also confirmed live on a real ANSEM swap in a
-// prior project) — NASDUCK has smaller Raydium/Orca pools too per the same
+// (Jupiter Aggregator v6 also confirmed live on a real swap in a prior
+// project) — NASDUCK has smaller Raydium/Orca pools too per the same
 // DexScreener pair list, so kept for coverage even without a live check on
 // those specific ones.
 export const DEX_PROGRAM_IDS = [

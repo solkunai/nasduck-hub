@@ -41,14 +41,14 @@ flowing to explain why.
 
 ## Supabase backend
 
-A separate Supabase project from ANSEM Hub's own backs all of Phase 2. Two Edge Function secrets
+A dedicated Supabase project backs all of Phase 2. Two Edge Function secrets
 set via the dashboard (Project Settings → Edge Functions →
 Secrets): `HELIUS_RPC_URL` (accepts either a bare API key or a full RPC URL — no particular format
 required) and `CRON_SECRET` (a project-generated random string, not a third-party credential —
 reused as the shared secret for both the holder-snapshot cron job and the Helius webhook's auth
 header, to avoid asking for a new one per feature). The MCP connection for future sessions is
-registered under the name `supabase-nasduck` (not the default `supabase`, which is ANSEM Hub's own
-connection) since both projects' tools need to coexist — see `.mcp.json` for the placeholder
+registered under the name `supabase-nasduck` (not the default `supabase`, which is reserved for
+another project's connection) since multiple projects' tools need to coexist — see `.mcp.json` for the placeholder
 pattern used to commit this safely (no real token in the repo). If `mcp__supabase-nasduck__*`
 tools ever disconnect mid-session with `ENOENT: npx not found`, that's a known environment PATH
 issue, not a broken token — see `claude mcp add ... -- /opt/homebrew/bin/npx ...` (absolute path)
@@ -56,15 +56,15 @@ in the MCP config.
 
 ## Wallet PnL
 
-Connecting a wallet shows a "Your Position" card with realized/unrealized PnL on $NASDUCK, same
-proven approach as ANSEM Hub's: an on-demand Supabase Edge Function (`wallet-trades`) reads the
+Connecting a wallet shows a "Your Position" card with realized/unrealized PnL on $NASDUCK: an
+on-demand Supabase Edge Function (`wallet-trades`) reads the
 wallet's last 14 days of transaction history via Helius, classifies buys/sells by checking for a
 known DEX program ID on each swap, and caches the result for 10 minutes so repeat views don't
 re-spend Helius credits. The DEX program list was verified two ways, not assumed: NASDUCK's real
 pool addresses were pulled from DexScreener, then `getAccountInfo`'d directly to confirm which
-program owns them (PumpSwap and Meteora DLMM, both added beyond ANSEM's original list). PnL for
+program owns them (PumpSwap and Meteora DLMM). PnL for
 any pre-existing balance outside that 14-day window is honestly reported as "unknown" rather than
-assumed to be free profit — same disclosed limitation as ANSEM Hub.
+assumed to be free profit — a disclosed limitation, not an oversight.
 
 ## Holder leaderboard ("Top of Book")
 

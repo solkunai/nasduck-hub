@@ -1,8 +1,7 @@
 -- Short-TTL cache for on-demand wallet PnL lookups (see wallet-trades edge
 -- function) so repeat views of a popular wallet don't re-spend Helius credits.
 -- No public RLS policy at all: only the service-role client inside the edge
--- function touches this table, matching the same lockdown ANSEM Hub uses for
--- its equivalent table.
+-- function touches this table.
 create table if not exists public.wallet_trade_cache (
   wallet text primary key,
   computed_at timestamptz not null default now(),

@@ -39,7 +39,7 @@ export function MarketProvider({ children }: { children: ReactNode }) {
   // free lite-api tier caps at 1 req/sec (60/min sliding window) per client —
   // this loop and the swap widget's own quote poll share that budget for a
   // single visitor, so both stay well under it with real margin (learned the
-  // hard way on ANSEM Hub: 2s+2s summed to just over the limit for one tab).
+  // hard way on a prior project: 2s+2s summed to just over the limit for one tab).
   useEffect(() => {
     let cancelled = false
     async function load() {

@@ -1,7 +1,6 @@
 -- rpc-proxy has to be callable with no Supabase auth (a wallet's Connection
 -- object can't send our headers), so this table backs a real per-IP rate
--- limit instead of relying on obscurity alone. Same pattern as ANSEM Hub's
--- rpc-proxy.
+-- limit instead of relying on obscurity alone.
 create table if not exists public.rpc_proxy_rate_limit (
   ip text not null,
   window_start timestamptz not null,

@@ -1,15 +1,16 @@
 import { VersionedTransaction, type PublicKey } from '@solana/web3.js'
 import { FEE_BPS, REFERRAL_ACCOUNT as NASDUCK_REFERRAL_ACCOUNT, WSOL_MINT } from './nasduck'
 
-// Jupiter's Ultra API, not the classic quote/v1+swap/v1 pair ANSEM Hub used.
-// Two reasons: (1) ANSEM Hub proved on-chain that the classic endpoints'
-// feeAccount/platformFeeBps mechanism can fail with a real InvalidTokenAccount
-// error for some routes — Ultra's referralAccount/referralFee goes through
-// Jupiter's officially-supported, wallet-recognized Referral Program instead.
+// Jupiter's Ultra API, not the classic quote/v1+swap/v1 pair.
+// Two reasons: (1) confirmed on-chain in a prior project that the classic
+// endpoints' feeAccount/platformFeeBps mechanism can fail with a real
+// InvalidTokenAccount error for some routes — Ultra's referralAccount/
+// referralFee goes through Jupiter's officially-supported, wallet-recognized
+// Referral Program instead.
 // (2) Ultra's /execute broadcasts the signed transaction on Jupiter's own
 // backend (via "Beam"), so this app never calls connection.sendRawTransaction
-// itself — sidesteps the public-RPC-blocks-sendTransaction problem ANSEM Hub
-// needed a whole edge-function proxy to work around.
+// itself — sidesteps the public-RPC-blocks-sendTransaction problem that
+// needed a whole edge-function proxy to work around elsewhere.
 const ORDER_URL = 'https://lite-api.jup.ag/ultra/v1/order'
 const EXECUTE_URL = 'https://lite-api.jup.ag/ultra/v1/execute'
 

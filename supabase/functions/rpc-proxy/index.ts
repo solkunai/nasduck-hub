@@ -3,14 +3,13 @@ import { dynamicCorsHeaders } from '../_shared/cors.ts'
 
 // Confirmed live: the public Solana RPC (api.mainnet-beta.solana.com)
 // returns a flat 403 "Access forbidden" for getBalance from nasduck.wtf's
-// real origin — not a rate-limit, an outright block. Same class of problem
-// ANSEM Hub solved with its own rpc-proxy; ported that proven pattern
-// rather than re-deriving it, with one real difference: no sendTransaction/
+// real origin — not a rate-limit, an outright block. Proxying through this
+// function with one real constraint: no sendTransaction/
 // simulateTransaction in the allowlist below. NASDUCK's swap widget never
 // calls those on this Connection at all — Jupiter's Ultra API broadcasts
 // the signed transaction on its own backend (see lib/swap.ts) — so this
-// proxy only ever needs to be a read-only account-data relay, which is a
-// strictly safer default than ANSEM's version needed to allow.
+// proxy only ever needs to be a read-only account-data relay, a strictly
+// safer default than allowing writes would be.
 const HELIUS_SECRET = Deno.env.get('HELIUS_RPC_URL')
 const HELIUS_RPC_URL =
   HELIUS_SECRET && !HELIUS_SECRET.startsWith('http')

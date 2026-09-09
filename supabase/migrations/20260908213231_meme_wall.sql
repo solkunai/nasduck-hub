@@ -5,9 +5,9 @@
 -- count that auto-hides a meme past a threshold.
 --
 -- Note on "wallet-gated": there is no real signature-based auth in this
--- project (same as ANSEM Hub's Creators feature) — the wallet address is a
--- client-asserted text field, not cryptographically verified server-side.
--- Accepted precedent already established there; not solved fresh here.
+-- project — the wallet address is a client-asserted text field, not
+-- cryptographically verified server-side. A known, accepted tradeoff for a
+-- vanity feature like this, not an oversight.
 create table if not exists public.memes (
   id bigint generated always as identity primary key,
   wallet text not null,
@@ -80,8 +80,7 @@ alter table public.meme_reports enable row level security;
 drop policy if exists "memes_public_read" on public.memes;
 create policy "memes_public_read" on public.memes for select using (not hidden);
 
--- Shape-constrained public insert, same pattern as ANSEM Hub's
--- content_submissions: caption length capped, and the mutable/computed
+-- Shape-constrained public insert: caption length capped, and the mutable/computed
 -- columns (votes, reported_count, hidden) must be left at their defaults —
 -- forging them through this insert path is blocked by the check clause.
 drop policy if exists "memes_insert" on public.memes;

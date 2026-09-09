@@ -1,4 +1,4 @@
-// Same DexScreener + Jupiter combo validated on ANSEM Hub: both free, no
+// DexScreener + Jupiter combo, both free, no
 // API key, no rate-limit surprises at this app's polling cadence.
 const DEX_TOKENS = 'https://api.dexscreener.com/latest/dex/tokens'
 
@@ -28,8 +28,8 @@ const MAX_HOURLY_CHANGE_PCT = 1000
 // DexScreener returns every pair a token appears in, including thin/broken
 // pools that can report wildly wrong prices. Filter obvious outliers,
 // prefer major-quote pairs, then reject anything still far from the median
-// before picking by liquidity. (Same defensive logic proven necessary on
-// ANSEM Hub, where an unfiltered pick once reported a $3.1T market cap off
+// before picking by liquidity. (Defensive logic proven necessary on a prior
+// project, where an unfiltered pick once reported a $3.1T market cap off
 // a single broken pump.fun pool.)
 function pickBase(pairs: DexPair[], mint: string): TokenMarket | null {
   let candidates = pairs.filter((p) => {
