@@ -50,12 +50,13 @@ export function Hero() {
           </div>
         </div>
 
-        <a
-          href="#memes"
-          className="mb-5 inline-flex items-center gap-2 rounded-full border border-up bg-[rgba(111,190,68,.1)] px-4 py-2 font-mono text-[12.5px] text-up transition-colors hover:bg-[rgba(111,190,68,.18)]"
-        >
-          🦆 CLICK FOR MEMES
-        </a>
+        <DownloadShareButton
+          imageUrl="/mascot/nasduck-logo.jpg"
+          filename="nasduck-mascot.jpg"
+          shareText="the official $NASDUCK mascot — fired from Wall Street, hired by degens"
+          label="⬇ DOWNLOAD THE DUCK"
+          className="mb-5 inline-flex items-center gap-2 rounded-full border border-line px-4 py-2 font-mono text-[12.5px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink-primary"
+        />
 
         <div className="rounded-xl border border-line bg-gradient-to-b from-panel to-panel-deep p-4">
           <div className="mb-2 flex items-center justify-between gap-3">
@@ -107,13 +108,12 @@ export function Hero() {
             className={`relative w-4/5 rounded-full shadow-[0_24px_60px_rgba(0,0,0,.55)] ${mascotAnim}`}
           />
         </div>
-        <DownloadShareButton
-          imageUrl="/mascot/nasduck-logo.jpg"
-          filename="nasduck-mascot.jpg"
-          shareText="the official $NASDUCK mascot — fired from Wall Street, hired by degens"
-          label="⬇ DOWNLOAD THE DUCK"
-          className="rounded-[10px] bg-brand px-7 py-3.5 font-display text-[15px] text-bg transition-all hover:-translate-y-0.5 hover:bg-brand-hover"
-        />
+        <a
+          href="#memes"
+          className="flex items-center gap-2.5 rounded-[10px] bg-brand px-7 py-3.5 font-display text-[15px] text-bg transition-all hover:-translate-y-0.5 hover:bg-brand-hover"
+        >
+          🦆 CLICK FOR MEMES
+        </a>
       </div>
     </div>
   )
