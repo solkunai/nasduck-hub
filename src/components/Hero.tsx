@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useMarket } from '../providers/MarketProvider'
 import { NASDUCK_MINT } from '../lib/nasduck'
 import { formatPrice, formatPercent } from '../lib/format'
-import { DownloadShareButton } from './DownloadShareButton'
 
 export function Hero() {
   const m = useMarket()
@@ -49,14 +48,6 @@ export function Hero() {
             </div>
           </div>
         </div>
-
-        <DownloadShareButton
-          imageUrl="/mascot/nasduck-logo.jpg"
-          filename="nasduck-mascot.jpg"
-          shareText="the official $NASDUCK mascot — fired from Wall Street, hired by degens"
-          label="⬇ DOWNLOAD THE DUCK"
-          className="mb-5 inline-flex items-center gap-2 rounded-full border border-line px-4 py-2 font-mono text-[12.5px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink-primary"
-        />
 
         <div className="rounded-xl border border-line bg-gradient-to-b from-panel to-panel-deep p-4">
           <div className="mb-2 flex items-center justify-between gap-3">
