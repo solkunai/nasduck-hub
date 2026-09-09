@@ -1,19 +1,24 @@
 import { useRef, useState } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
-import { useMemeWall } from '../hooks/useMemeWall'
+import { useMemeWall, type Meme } from '../hooks/useMemeWall'
 import { formatTimeAgo } from '../lib/format'
-import { NASDUCK_X } from '../lib/nasduck'
+import { downloadImage } from '../lib/download'
+import { shareMemeToX } from '../lib/share'
 
 function agoFrom(iso: string): string {
   return formatTimeAgo((Date.now() - new Date(iso).getTime()) / 1000)
+}
+
+function filenameFor(meme: Meme): string {
+  return `nasduck-meme-${meme.id}.jpg`
 }
 
 export function MemeWall() {
   const { publicKey, connected } = useWallet()
   const { setVisible } = useWalletModal()
   const wallet = publicKey?.toBase58() ?? null
-  const { memes, heroMeme, myVotes, sort, setSort, loading, error, upvote, report, upload } = useMemeWall(wallet)
+  const { memes, heroMeme, myVotes, sort, setSort, loading, error, voteError, upvote, report, upload } = useMemeWall(wallet)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
@@ -44,7 +49,7 @@ export function MemeWall() {
   }
 
   return (
-    <div className="mx-auto max-w-[1240px] px-5 py-9">
+    <div id="memes" className="mx-auto max-w-[1240px] scroll-mt-[110px] px-5 py-9">
       <div className="mb-[18px] flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="font-display text-[clamp(24px,3vw,34px)] tracking-tight text-ink-primary">THE MEME DESK</h2>
@@ -77,6 +82,7 @@ export function MemeWall() {
       </div>
 
       {uploadError && <div className="mb-3 font-mono text-[11px] text-down">{uploadError}</div>}
+      {voteError && <div className="mb-3 font-mono text-[11px] text-down">{voteError}</div>}
 
       {heroMeme && (
         <div className="mb-[18px] grid items-center gap-5 rounded-2xl border border-line-strong bg-gradient-to-r from-[#1B2E1A] to-panel-deep p-[18px] [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
@@ -99,14 +105,8 @@ export function MemeWall() {
               >
                 ▲ {heroMeme.votes}
               </button>
-              <a
-                href={NASDUCK_X}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-lg border border-line px-3.5 py-2.5 font-mono text-[12.5px] text-ink-muted hover:border-line-strong"
-              >
-                SHARE ON X
-              </a>
+              <ShareButton meme={heroMeme} />
+              <SaveButton meme={heroMeme} />
             </div>
           </div>
         </div>
@@ -136,6 +136,65 @@ export function MemeWall() {
   )
 }
 
+function ShareButton({ meme, compact }: { meme: Meme; compact?: boolean }) {
+  const [busy, setBusy] = useState(false)
+  async function handleShare() {
+    setBusy(true)
+    try {
+      await shareMemeToX(meme.imageUrl, meme.caption, filenameFor(meme))
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (compact) {
+    return (
+      <button onClick={handleShare} disabled={busy} title="share on X" className="hover:text-brand disabled:opacity-50">
+        𝕏
+      </button>
+    )
+  }
+  return (
+    <button
+      onClick={handleShare}
+      disabled={busy}
+      className="rounded-lg border border-line px-3.5 py-2.5 font-mono text-[12.5px] text-ink-muted hover:border-line-strong disabled:opacity-50"
+    >
+      {busy ? 'OPENING…' : 'SHARE ON X'}
+    </button>
+  )
+}
+
+function SaveButton({ meme, compact }: { meme: Meme; compact?: boolean }) {
+  const [busy, setBusy] = useState(false)
+  async function handleSave() {
+    setBusy(true)
+    try {
+      await downloadImage(meme.imageUrl, filenameFor(meme))
+    } catch {
+      // A failed download here just means "nothing happened" for the user —
+      // no state worth tracking for a save button, unlike votes/uploads.
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (compact) {
+    return (
+      <button onClick={handleSave} disabled={busy} title="save image" className="hover:text-brand disabled:opacity-50">
+        ⬇
+      </button>
+    )
+  }
+  return (
+    <button
+      onClick={handleSave}
+      disabled={busy}
+      className="rounded-lg border border-line px-3.5 py-2.5 font-mono text-[12.5px] text-ink-muted hover:border-line-strong disabled:opacity-50"
+    >
+      {busy ? 'SAVING…' : 'SAVE'}
+    </button>
+  )
+}
+
 function MemeCard({
   meme,
   voted,
@@ -143,7 +202,7 @@ function MemeCard({
   onUpvote,
   onReport,
 }: {
-  meme: import('../hooks/useMemeWall').Meme
+  meme: Meme
   voted: boolean
   canVote: boolean
   onUpvote: (id: number) => void
@@ -169,7 +228,9 @@ function MemeCard({
           >
             ▲ {meme.votes}
           </button>
-          <div className="flex items-center gap-2 font-mono text-[10px] text-ink-dim">
+          <div className="flex items-center gap-2.5 font-mono text-[11px] text-ink-dim">
+            <SaveButton meme={meme} compact />
+            <ShareButton meme={meme} compact />
             <span>{agoFrom(meme.createdAt)}</span>
             <button
               onClick={() => {

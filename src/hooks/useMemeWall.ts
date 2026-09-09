@@ -87,15 +87,22 @@ export function useMemeWall(wallet: string | null) {
       .then(({ data }) => setMyVotes(new Set((data ?? []).map((r) => r.meme_id))))
   }, [wallet])
 
+  // Separate from the page-level `error` above — this is transient,
+  // per-action feedback (was silently swallowed before: a failed vote just
+  // snapped back to unvoted with zero explanation, which looks identical to
+  // "votes don't stick" even when the actual persistence is fine).
+  const [voteError, setVoteError] = useState<string | null>(null)
+
   const upvote = useCallback(
     async (memeId: number) => {
       if (!wallet || myVotes.has(memeId)) return
+      setVoteError(null)
       setMyVotes((s) => new Set(s).add(memeId))
       setMemes((prev) => prev.map((m) => (m.id === memeId ? { ...m, votes: m.votes + 1 } : m)))
       setHeroMeme((h) => (h && h.id === memeId ? { ...h, votes: h.votes + 1 } : h))
 
-      const { error: voteError } = await supabase.from('meme_votes').insert({ meme_id: memeId, wallet })
-      if (voteError) {
+      const { error: voteInsertError } = await supabase.from('meme_votes').insert({ meme_id: memeId, wallet })
+      if (voteInsertError) {
         // Roll back the optimistic update (most likely cause: already voted
         // from another tab/session — the primary key rejects the insert).
         setMyVotes((s) => {
@@ -104,15 +111,23 @@ export function useMemeWall(wallet: string | null) {
           return next
         })
         setMemes((prev) => prev.map((m) => (m.id === memeId ? { ...m, votes: Math.max(0, m.votes - 1) } : m)))
+        setHeroMeme((h) => (h && h.id === memeId ? { ...h, votes: Math.max(0, h.votes - 1) } : h))
+        setVoteError(
+          voteInsertError.code === '23505' ? 'already voted from this wallet' : `vote didn't save: ${voteInsertError.message}`,
+        )
       }
     },
     [wallet, myVotes],
   )
 
-  const report = useCallback(async (memeId: number) => {
-    if (!wallet) return
-    await supabase.from('meme_reports').insert({ meme_id: memeId, wallet })
-  }, [wallet])
+  const report = useCallback(
+    async (memeId: number) => {
+      if (!wallet) return
+      const { error: reportError } = await supabase.from('meme_reports').insert({ meme_id: memeId, wallet })
+      if (reportError && reportError.code !== '23505') setVoteError(`report didn't save: ${reportError.message}`)
+    },
+    [wallet],
+  )
 
   const upload = useCallback(
     async (file: File, caption: string) => {
@@ -131,5 +146,11 @@ export function useMemeWall(wallet: string | null) {
     [wallet],
   )
 
-  return { memes, heroMeme, myVotes, sort, setSort, loading, error, upvote, report, upload, reload: load }
+  useEffect(() => {
+    if (!voteError) return
+    const t = setTimeout(() => setVoteError(null), 4000)
+    return () => clearTimeout(t)
+  }, [voteError])
+
+  return { memes, heroMeme, myVotes, sort, setSort, loading, error, voteError, upvote, report, upload, reload: load }
 }

@@ -49,6 +49,13 @@ export function Hero() {
           </div>
         </div>
 
+        <a
+          href="#memes"
+          className="mb-5 inline-flex items-center gap-2 rounded-full border border-up bg-[rgba(111,190,68,.1)] px-4 py-2 font-mono text-[12.5px] text-up transition-colors hover:bg-[rgba(111,190,68,.18)]"
+        >
+          🦆 CLICK FOR MEMES
+        </a>
+
         <div className="rounded-xl border border-line bg-gradient-to-b from-panel to-panel-deep p-4">
           <div className="mb-2 flex items-center justify-between gap-3">
             <div className="font-mono text-[10.5px] tracking-wide text-ink-faint">
