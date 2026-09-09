@@ -1,10 +1,10 @@
 # NASDUCK Hub
 
 Live price, chart, and swap for [$NASDUCK](https://x.com/NASDUCKOTC) on Solana — plus a community
-scoreboard tracking progress toward a $100M market cap and 100,000 holders.
+scoreboard tracking progress toward a $1B market cap and 100,000 holders.
 
 - Contract: `7Y7V1a4m2nWK7BMgbka5B4vR1pDvCK7yva3Hnrqkraze` (Solana, Token-2022, 6 decimals)
-- Stack: Vite + React 19 + TypeScript + Tailwind + Solana Wallet Adapter
+- Stack: Vite + React 19 + TypeScript + Tailwind + Privy (embedded wallets + external wallet login)
 
 ## Setup
 
@@ -93,7 +93,7 @@ never had to be re-entered or seen again to set this up.
 
 ## Status
 
-**Phase 1 (live):** live ticker, price chart, $100M mcap / 100K holders tracker, swap widget
+**Phase 1 (live):** live ticker, price chart, $1B mcap / 100K holders tracker, swap widget
 (Jupiter Ultra API).
 
 **Phase 2 (live):** wallet PnL, holder leaderboard, meme wall, "Feed the Duck" clicker game, and

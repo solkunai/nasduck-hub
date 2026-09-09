@@ -9,9 +9,18 @@ interface Mark {
   value: number
 }
 
+// Fixed 10%/25%/50%/100% fractions of the goal rather than hardcoded
+// dollar amounts — was [10M, 25M, 50M, 100M] sized specifically for a
+// $100M goal; with the goal now $1B those would've all crammed into the
+// first 10% of the bar instead of spreading across it. The 100% mark
+// matters beyond just being the finish line — it's what fires the
+// "MILESTONE CROSSED" celebration burst once the goal is fully hit.
 function marks(goal: number, unit: 'usd' | 'num'): Mark[] {
-  const steps = unit === 'usd' ? [10e6, 25e6, 50e6, 100e6] : [10_000, 25_000, 50_000, 100_000]
-  return steps.map((v) => ({ label: unit === 'usd' ? formatUsdCompact(v) : formatNumber(v), pct: (v / goal) * 100, value: v }))
+  const fractions = [0.1, 0.25, 0.5, 1]
+  return fractions.map((f) => {
+    const v = goal * f
+    return { label: unit === 'usd' ? formatUsdCompact(v) : formatNumber(v), pct: f * 100, value: v }
+  })
 }
 
 function Track({
@@ -120,7 +129,7 @@ export function MissionControl() {
           title="MARKET CAP"
           current={m.marketCap}
           goal={MCAP_GOAL}
-          goalLabel="$100M"
+          goalLabel="$1B"
           currentLabel={formatUsdCompact(m.marketCap)}
           color="#F5911E"
           glow="rgba(245,145,30,.35)"

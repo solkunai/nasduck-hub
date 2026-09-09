@@ -37,7 +37,7 @@ export const REFERRAL_ACCOUNT = 'HszE2CwtT7buhNhxHqJUcj2iSXimRywzTuqnR5HgdGJ4'
 export const SUPABASE_URL = 'https://qrqenowwwccmfgwsnfpa.supabase.co'
 export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_8in3GY7CIf71OL_PUZv_-Q_JIXeKa4q'
 
-export const MCAP_GOAL = 100_000_000
+export const MCAP_GOAL = 1_000_000_000
 export const HOLDER_GOAL = 100_000
 
 // Multiple unrelated tokens are circulating under the NASDUCK/$NDUCK name
