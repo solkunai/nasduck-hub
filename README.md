@@ -39,17 +39,22 @@ for any reason, `fetchOrder` falls back to a fee-less order automatically so the
 working either way — check the browser console for a `[swap]`-prefixed warning if fees stop
 flowing to explain why.
 
-## Supabase backend (Phase 2)
+## Supabase backend
 
-New Supabase project (`qrqenowwwccmfgwsnfpa`, separate from ANSEM Hub's own project) backs the
-wallet PnL feature. `HELIUS_RPC_URL` is set as an Edge Function secret via the dashboard (Project
-Settings → Edge Functions → Secrets) — the function accepts either a bare API key or a full RPC
-URL there, so no particular format is required. The MCP connection for future sessions is
+New Supabase project (`qrqenowwwccmfgwsnfpa`, separate from ANSEM Hub's own project) backs all of
+Phase 2. Two Edge Function secrets set via the dashboard (Project Settings → Edge Functions →
+Secrets): `HELIUS_RPC_URL` (accepts either a bare API key or a full RPC URL — no particular format
+required) and `CRON_SECRET` (a project-generated random string, not a third-party credential —
+reused as the shared secret for both the holder-snapshot cron job and the Helius webhook's auth
+header, to avoid asking for a new one per feature). The MCP connection for future sessions is
 registered under the name `supabase-nasduck` (not the default `supabase`, which is ANSEM Hub's own
 connection) since both projects' tools need to coexist — see `.mcp.json` for the placeholder
-pattern used to commit this safely (no real token in the repo).
+pattern used to commit this safely (no real token in the repo). If `mcp__supabase-nasduck__*`
+tools ever disconnect mid-session with `ENOENT: npx not found`, that's a known environment PATH
+issue, not a broken token — see `claude mcp add ... -- /opt/homebrew/bin/npx ...` (absolute path)
+in the MCP config.
 
-## Wallet PnL (Phase 2, live)
+## Wallet PnL
 
 Connecting a wallet shows a "Your Position" card with realized/unrealized PnL on $NASDUCK, same
 proven approach as ANSEM Hub's: an on-demand Supabase Edge Function (`wallet-trades`) reads the
@@ -61,15 +66,38 @@ program owns them (PumpSwap and Meteora DLMM, both added beyond ANSEM's original
 any pre-existing balance outside that 14-day window is honestly reported as "unknown" rather than
 assumed to be free profit — same disclosed limitation as ANSEM Hub.
 
+## Holder leaderboard ("Top of Book")
+
+Snapshotted every 5 minutes via `snapshot-holders`, scheduled with a real committed `pg_cron` +
+`pg_net` migration (5-minute cadence chosen specifically to stay clear of Helius rate limits — 2
+RPC calls per run). **Filters out pool/LP addresses before ranking** — confirmed live that a
+pool's own reserve token account is often among the largest accounts for an actively-traded token,
+which would otherwise rank the pool itself as the "#1 holder." `KNOWN_POOL_ADDRESSES` in
+`supabase/functions/_shared/constants.ts` holds every NASDUCK pool pulled from DexScreener; recheck
+that list if a pool ever shows up ranked again (new pools can appear). Diamond-hands badges are
+computed lazily per-row on click (reusing the `wallet-trades` function), not precomputed for all
+20 holders.
+
+## Whale/buy-sell feed ("Fowl Play Tape")
+
+A Helius webhook (`helius-swap-webhook`) watches NASDUCK's four highest-liquidity pools and
+classifies buys/sells from raw `tokenTransfers` itself — **deliberately not trusting Helius's own
+`type: "SWAP"` classification**, since NASDUCK's real swaps were found (while building this) to
+route through non-standard wrapper/router programs that may not get tagged as swaps reliably.
+Subscribed to both `SWAP` and `TRANSFER` transaction types for the same reason. Trades below $250
+are dropped before insert (tune `MIN_USD_AMOUNT` in the function to adjust). The frontend
+subscribes via Supabase Realtime (`postgres_changes` on insert) rather than polling. The webhook
+itself was registered by a one-off setup function (`register-helius-webhook`) that reads the
+already-configured `HELIUS_RPC_URL` secret to extract the API key server-side — the raw Helius key
+never had to be re-entered or seen again to set this up.
+
 ## Status
 
 **Phase 1 (live):** live ticker, price chart, $100M mcap / 100K holders tracker, swap widget
 (Jupiter Ultra API).
 
-**Phase 2:** wallet PnL is live (see above). Whale/buy-sell alert feed, holder leaderboard with
-diamond-hands badges, community meme wall, and "Feed the Duck" clicker game are still not started
-— they need additional backend pieces (a Helius webhook listener for the whale feed, storage for
-the meme wall) beyond what PnL needed.
+**Phase 2 (live):** wallet PnL, holder leaderboard, meme wall, "Feed the Duck" clicker game, and
+the whale/buy-sell feed — everything originally scoped for Phase 2 has shipped.
 
 ## Notes for future sessions
 

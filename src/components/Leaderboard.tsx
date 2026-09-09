@@ -7,34 +7,32 @@ export function Leaderboard() {
   const { holders, loading, error, updatedAt } = useHolderLeaderboard()
 
   return (
-    <div className="mx-auto max-w-[1240px] px-5 pb-9">
-      <div className="overflow-hidden rounded-2xl border border-line bg-panel">
-        <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-line px-[18px] py-[15px]">
-          <div className="font-display text-lg text-ink-primary">TOP OF BOOK</div>
-          <div className="flex items-center gap-3 font-mono text-[10px] text-ink-faint">
-            <span>◆ = DIAMOND HANDS (14D)</span>
-            {updatedAt && <span>UPDATED {formatTimeAgo((Date.now() - new Date(updatedAt).getTime()) / 1000)}</span>}
-          </div>
+    <div className="min-w-0 overflow-hidden rounded-2xl border border-line bg-panel">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-line px-[18px] py-[15px]">
+        <div className="font-display text-lg text-ink-primary">TOP OF BOOK</div>
+        <div className="flex items-center gap-3 font-mono text-[10px] text-ink-faint">
+          <span>◆ = DIAMOND HANDS (14D)</span>
+          {updatedAt && <span>UPDATED {formatTimeAgo((Date.now() - new Date(updatedAt).getTime()) / 1000)}</span>}
         </div>
+      </div>
 
-        <div className="grid grid-cols-[38px_minmax(0,1fr)_auto_62px] gap-2.5 border-b border-line px-[18px] py-2.5 font-mono text-[10px] tracking-wide text-ink-faint">
-          <div>#</div>
-          <div>WALLET</div>
-          <div className="text-right">BALANCE</div>
-          <div className="text-right">24H</div>
-        </div>
+      <div className="grid grid-cols-[38px_minmax(0,1fr)_auto_62px] gap-2.5 border-b border-line px-[18px] py-2.5 font-mono text-[10px] tracking-wide text-ink-faint">
+        <div>#</div>
+        <div>WALLET</div>
+        <div className="text-right">BALANCE</div>
+        <div className="text-right">24H</div>
+      </div>
 
-        {loading && <div className="py-8 text-center font-mono text-sm text-ink-muted">loading top holders…</div>}
-        {error && <div className="py-8 text-center font-mono text-sm text-down">{error}</div>}
-        {!loading && !error && holders.length === 0 && (
-          <div className="py-8 text-center font-mono text-sm text-ink-faint">no snapshot yet — check back shortly</div>
-        )}
+      {loading && <div className="py-8 text-center font-mono text-sm text-ink-muted">loading top holders…</div>}
+      {error && <div className="py-8 text-center font-mono text-sm text-down">{error}</div>}
+      {!loading && !error && holders.length === 0 && (
+        <div className="py-8 text-center font-mono text-sm text-ink-faint">no snapshot yet — check back shortly</div>
+      )}
 
-        <div className="max-h-[480px] overflow-auto">
-          {holders.map((h) => (
-            <HolderRowItem key={h.wallet} holder={h} />
-          ))}
-        </div>
+      <div className="max-h-[480px] overflow-auto">
+        {holders.map((h) => (
+          <HolderRowItem key={h.wallet} holder={h} />
+        ))}
       </div>
     </div>
   )

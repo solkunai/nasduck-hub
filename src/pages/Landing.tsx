@@ -5,11 +5,11 @@ import { MissionControl } from '../components/MissionControl'
 import { PriceChart } from '../components/PriceChart'
 import { SwapWidget } from '../components/SwapWidget'
 import { PnlCard } from '../components/PnlCard'
+import { WhaleFeed } from '../components/WhaleFeed'
 import { Leaderboard } from '../components/Leaderboard'
 import { MemeWall } from '../components/MemeWall'
 import { ClickerGame } from '../components/ClickerGame'
 import { Memo } from '../components/Memo'
-import { ComingSoonStrip } from '../components/ComingSoonStrip'
 import { Footer } from '../components/layout/Footer'
 
 export function Landing() {
@@ -24,10 +24,12 @@ export function Landing() {
         <SwapWidget />
       </div>
       <PnlCard />
-      <Leaderboard />
+      <div className="mx-auto grid max-w-[1240px] items-start gap-[18px] px-5 pb-9 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
+        <WhaleFeed />
+        <Leaderboard />
+      </div>
       <MemeWall />
       <ClickerGame />
-      <ComingSoonStrip />
       <Memo />
       <Footer />
     </div>
