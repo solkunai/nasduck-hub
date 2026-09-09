@@ -104,7 +104,16 @@ export function AppProviders({ children }: { children: ReactNode }) {
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
-        loginMethods: ['email', 'google', 'twitter'],
+        // 'wallet' is what actually puts a "connect an existing wallet"
+        // entry in the modal — externalWallets.solana.connectors below
+        // makes Phantom/Solflare/Backpack available to connect, but
+        // loginMethods is what controls what the modal actually shows, and
+        // it silently dropped the wallet option entirely without it
+        // (confirmed live). Tried 'siws' first since that literal exists on
+        // a same-named LoginMethod type elsewhere in the SDK — the real
+        // compiler error for *this* config field's actual type (caught by
+        // tsc, not assumed) named 'wallet' as the real accepted value.
+        loginMethods: ['email', 'google', 'twitter', 'wallet'],
         appearance: {
           // Defaults to 'ethereum-only' — NASDUCK is Solana-only, and
           // leaving this unset would hide external Solana wallets (Phantom,

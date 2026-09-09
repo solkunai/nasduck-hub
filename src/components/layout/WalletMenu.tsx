@@ -10,8 +10,7 @@ import { shortenAddress } from '../../lib/format'
 // export-private-key action, so a user isn't ever locked into Privy's
 // custody if they want to move to Phantom/Backpack later.
 export function WalletMenu() {
-  const { ready, connected, publicKey, login, logout, isEmbedded, canExport, exportWallet, email } =
-    useActiveWallet()
+  const { ready, connected, publicKey, login, logout, isEmbedded, canExport, exportWallet } = useActiveWallet()
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -34,7 +33,11 @@ export function WalletMenu() {
   }
 
   const address = publicKey.toBase58()
-  const label = email ?? shortenAddress(address)
+  // Always the wallet address, never the email — even for someone who
+  // signed up via email, the header button should read like every other
+  // wallet-connect button on a crypto site, not surface their email
+  // publicly on screen.
+  const label = shortenAddress(address)
 
   async function copyAddress() {
     try {
