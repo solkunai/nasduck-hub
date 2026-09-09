@@ -76,7 +76,7 @@ export async function fetchOrder(
     ;({ ok, status, raw } = await requestOrder(baseParams))
   }
 
-  if (!ok) throw new Error(raw.error ?? `order ${status}`)
+  if (!ok) throw new Error(friendlyOrderError(raw) ?? `order ${status}`)
 
   let feeBps = raw.feeBps != null ? Number(raw.feeBps) : 0
   let feeMint: string | null = raw.feeMint ?? null
@@ -94,7 +94,7 @@ export async function fetchOrder(
       `[swap] fee would be collected in ${feeMint}, not SOL — refusing and refetching a fee-less order instead. This should never happen for a SOL/NASDUCK pair; investigate if it does.`,
     )
     const plain = await requestOrder(baseParams)
-    if (!plain.ok) throw new Error(plain.raw.error ?? `order ${plain.status}`)
+    if (!plain.ok) throw new Error(friendlyOrderError(plain.raw) ?? `order ${plain.status}`)
     raw = plain.raw
     feeBps = 0
     feeMint = null
@@ -116,6 +116,22 @@ export async function fetchOrder(
     feeMint,
     raw,
   }
+}
+
+// Confirmed live against a real low-SOL wallet: Jupiter's Ultra API returns
+// 200 OK with an `errorCode`/`error` embedded in the body (not an HTTP error
+// status) when it can't build a transaction — e.g. errorCode 3, "Minimum $5
+// for gasless". That's Jupiter's real gasless-sponsorship rule (it offers to
+// cover network fees for wallets with very little SOL, but only above a $5
+// trade size — otherwise sponsoring wouldn't be worth it to them), not a bug
+// here, but the raw string alone doesn't explain *why* to someone who hits
+// it. Translate the specific codes worth explaining; anything else falls
+// through to Jupiter's own message unchanged.
+function friendlyOrderError(raw: any): string | undefined {
+  if (raw?.errorCode === 3) {
+    return 'Your wallet has very little SOL, so Jupiter offers to cover the network fee for you — but only for trades worth $5 or more. Try a larger amount, or add a bit of SOL to cover the fee yourself.'
+  }
+  return raw?.error
 }
 
 export interface ExecuteResult {
