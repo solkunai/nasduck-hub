@@ -26,7 +26,15 @@ export function NavMenu() {
         <>
           {/* Closes on outside click — sits below the panel, above the page. */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-[46px] z-50 w-[200px] overflow-hidden rounded-xl border border-line-strong bg-panel shadow-[0_16px_40px_rgba(0,0,0,.5)]">
+          {/* On mobile this button sits mid-header (logo+wordmark to its
+              left, wallet/BUY buttons to its right), not flush against the
+              right edge — confirmed live at 390px that right-0 pushed the
+              200px panel left past x=0 and off-screen. Anchoring to the
+              button's own left edge instead keeps it under the button on
+              narrow screens; sm+ has enough room to the left of the button
+              for the original right-aligned panel to sit cleanly under the
+              whole button/link/wallet/BUY cluster like before. */}
+          <div className="absolute left-0 top-[46px] z-50 w-[200px] overflow-hidden rounded-xl border border-line-strong bg-panel shadow-[0_16px_40px_rgba(0,0,0,.5)] sm:left-auto sm:right-0">
             {LINKS.map((link) => (
               <a
                 key={link.href}
