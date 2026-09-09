@@ -11,8 +11,8 @@ export function Header() {
             alt="NASDUCK"
             className="h-9 w-9 shrink-0 rounded-full border border-line-strong object-cover"
           />
-          <span className="font-display text-[17px] tracking-tight text-ink-primary">NASDUCK</span>
-          <span className="rounded border border-[#6B4415] bg-[#1A1206] px-1.5 py-0.5 font-mono text-[10px] text-brand">
+          <span className="truncate font-display text-[17px] tracking-tight text-ink-primary">NASDUCK</span>
+          <span className="hidden rounded border border-[#6B4415] bg-[#1A1206] px-1.5 py-0.5 font-mono text-[10px] text-brand sm:inline-block">
             SOLANA
           </span>
         </div>
@@ -26,12 +26,25 @@ export function Header() {
           >
             @NASDUCKOTC
           </a>
-          <WalletMultiButton style={{ background: '#0E2140', border: '1px solid #1E3A66', borderRadius: 8, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, height: 38 }} />
+          <WalletMultiButton
+            style={{
+              background: '#0E2140',
+              border: '1px solid #1E3A66',
+              borderRadius: 8,
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 12,
+              height: 38,
+              whiteSpace: 'nowrap',
+              paddingLeft: 12,
+              paddingRight: 12,
+            }}
+          />
           <a
             href="#swap"
-            className="rounded-lg bg-brand px-4 py-2 font-display text-[13px] text-bg transition-colors hover:bg-brand-hover"
+            className="whitespace-nowrap rounded-lg bg-brand px-3 py-2 font-display text-[13px] text-bg transition-colors hover:bg-brand-hover sm:px-4"
           >
-            BUY $NASDUCK
+            <span className="sm:hidden">BUY</span>
+            <span className="hidden sm:inline">BUY $NASDUCK</span>
           </a>
         </div>
       </div>
