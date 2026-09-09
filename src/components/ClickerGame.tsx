@@ -17,7 +17,7 @@ export function ClickerGame() {
           onClick={() => setOpen((o) => !o)}
           className="flex w-full items-center gap-3.5 px-[18px] py-[15px] text-left hover:bg-panel"
         >
-          <img src="/mascot/nasduck-logo.jpg" alt="" className="h-7 w-7 rounded-full object-cover" />
+          <img src="/mascot/nasduck-clicker.png" alt="" className="h-7 w-7 object-contain" />
           <div className="font-mono text-[13px] tracking-wide text-ink-secondary">
             FEED THE DUCK <span className="text-ink-dim">/ break-room minigame</span>
           </div>
@@ -36,7 +36,7 @@ export function ClickerGame() {
                 }}
                 className={`flex h-[150px] w-[150px] select-none items-center justify-center rounded-full border border-line-strong bg-panel transition-transform hover:border-brand ${pressed ? 'scale-95' : ''}`}
               >
-                <img src="/mascot/nasduck-logo.jpg" alt="feed the duck" className="pointer-events-none h-[82%] w-[82%] rounded-full object-cover" />
+                <img src="/mascot/nasduck-clicker.png" alt="feed the duck" className="pointer-events-none h-[85%] w-[85%] object-contain" />
               </button>
               <div className="font-mono text-[11px] text-ink-faint">
                 CLICK TO FEED · {score > 60 ? 'he is full, keep going' : 'he is hungry'}
