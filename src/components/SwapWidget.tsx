@@ -6,7 +6,7 @@ import { useJupiterOrder } from '../hooks/useJupiterOrder'
 import { useBalances } from '../hooks/useBalances'
 import { executeOrder } from '../lib/swap'
 import { NASDUCK_MINT, WSOL_MINT, NASDUCK_DECIMALS, FEE_BPS } from '../lib/nasduck'
-import { formatPrice, formatTokenAmount } from '../lib/format'
+import { formatPrice, formatTokenAmount, formatUsdCompact } from '../lib/format'
 
 const SOL_DECIMALS = 9
 // Left unswapped on a MAX buy so the transaction still has SOL to pay
@@ -42,6 +42,12 @@ export function SwapWidget() {
 
   const { order, loading, error } = useJupiterOrder(inputMint, outputMint, amountRaw, publicKey?.toBase58())
   const receiveAmount = order ? order.outAmount / 10 ** outputDecimals : 0
+
+  // USD value of each side, independent of the input token's own price
+  // trend — SOL's price for whichever side is denominated in SOL, DUCK's
+  // for whichever side is denominated in DUCK.
+  const payUsd = amountNum * (side === 'BUY' ? market.solPrice : market.price)
+  const receiveUsd = receiveAmount * (side === 'BUY' ? market.price : market.solPrice)
 
   const payBalance = side === 'BUY' ? balances.sol : balances.nasduck
   const feePct = (order?.feeBps ?? FEE_BPS) / 100
@@ -127,6 +133,7 @@ export function SwapWidget() {
             {side === 'BUY' ? 'SOL' : 'DUCK'}
           </div>
         </div>
+        {payUsd > 0 && <div className="mt-1 font-mono text-[11px] text-ink-faint">≈ {formatUsdCompact(payUsd)}</div>}
         <div className="mt-2.5 flex gap-1.5">
           {[0.25, 0.5, 1].map((pct) => (
             <button
@@ -150,7 +157,9 @@ export function SwapWidget() {
           <span>{loading ? 'QUOTING…' : 'LIVE QUOTE'}</span>
         </div>
         <div className="mt-2 flex items-center gap-2.5">
-          <div className={`min-w-0 flex-1 overflow-hidden text-ellipsis font-mono text-[26px] font-bold ${market.change24h >= 0 ? 'text-up' : 'text-down'}`}>
+          <div
+            className={`min-w-0 flex-1 overflow-hidden text-ellipsis font-mono text-[26px] font-bold ${side === 'BUY' ? 'text-up' : 'text-down'}`}
+          >
             {receiveAmount > 0 ? (side === 'BUY' ? formatTokenAmount(receiveAmount) : receiveAmount.toFixed(4)) : '0'}
           </div>
           <div className="flex items-center gap-1.5 rounded-full border border-line bg-input py-1.5 pl-1.5 pr-3 font-mono text-[13px]">
@@ -162,6 +171,11 @@ export function SwapWidget() {
             {side === 'BUY' ? 'DUCK' : 'SOL'}
           </div>
         </div>
+        {receiveUsd > 0 && (
+          <div className={`mt-1 font-mono text-[11px] ${side === 'BUY' ? 'text-up' : 'text-down'}`}>
+            ≈ {formatUsdCompact(receiveUsd)}
+          </div>
+        )}
       </div>
 
       <div className="my-3 grid gap-1.5 font-mono text-[10.5px] text-ink-faint">
