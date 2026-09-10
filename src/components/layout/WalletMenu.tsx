@@ -10,7 +10,7 @@ import { shortenAddress } from '../../lib/format'
 // export-private-key action, so a user isn't ever locked into Privy's
 // custody if they want to move to Phantom/Backpack later.
 export function WalletMenu() {
-  const { ready, connected, publicKey, login, logout, isEmbedded, canExport, exportWallet } = useActiveWallet()
+  const { ready, connected, publicKey, login, logout, isEmbedded, canExport, exportWallet, xUsername } = useActiveWallet()
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -33,11 +33,12 @@ export function WalletMenu() {
   }
 
   const address = publicKey.toBase58()
-  // Always the wallet address, never the email — even for someone who
-  // signed up via email, the header button should read like every other
-  // wallet-connect button on a crypto site, not surface their email
-  // publicly on screen.
-  const label = shortenAddress(address)
+  // X handle when signed in that way — it's public-facing identity anyway
+  // (unlike email, which stays hidden per the earlier choice), and more
+  // recognizable than a truncated address for someone who knows the
+  // person by their @. Falls back to the address for every other sign-in
+  // method (email, Google, or an external wallet).
+  const label = xUsername ? `@${xUsername}` : shortenAddress(address)
 
   async function copyAddress() {
     try {
@@ -68,7 +69,9 @@ export function WalletMenu() {
             <div className="border-b border-line px-4 py-3">
               <div className="font-mono text-[10px] tracking-wide text-ink-faint">
                 {isEmbedded ? 'NASDUCK WALLET' : 'CONNECTED WALLET'}
+                {xUsername && ' · SIGNED IN VIA X'}
               </div>
+              {xUsername && <div className="mt-1 font-mono text-[12.5px] text-ink-primary">@{xUsername}</div>}
               <div className="mt-1 truncate font-mono text-[12.5px] text-ink-secondary">{address}</div>
             </div>
 

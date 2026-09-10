@@ -19,6 +19,7 @@ export interface ActiveWallet {
   canExport: boolean
   exportWallet: () => Promise<void>
   email: string | null
+  xUsername: string | null
 }
 
 // Privy's own SDK isn't mounted until providers/PrivyProviders.tsx finishes
@@ -47,6 +48,7 @@ const DISCONNECTED: ActiveWallet = {
   canExport: false,
   exportWallet: async () => {},
   email: null,
+  xUsername: null,
 }
 
 const ActiveWalletContext = createContext<ActiveWallet>(DISCONNECTED)
@@ -139,6 +141,11 @@ export function PrivyActiveWalletPublisher({
     canExport: connected && isEmbedded,
     exportWallet,
     email: user?.email?.address ?? null,
+    // .username (not .name) — Twitter's display name can change/contain
+    // spaces, the @handle is what's actually recognizable and matches how
+    // every other X-connected product shows it. Confirmed the field name
+    // against the SDK's own type (Twitter.username), not assumed.
+    xUsername: user?.twitter?.username ?? null,
   }
 
   return <ActiveWalletContext.Provider value={value}>{children}</ActiveWalletContext.Provider>
