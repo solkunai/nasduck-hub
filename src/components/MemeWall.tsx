@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { useActiveWallet } from '../hooks/useActiveWallet'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useMemeWall, type Meme } from '../hooks/useMemeWall'
 import { formatTimeAgo } from '../lib/format'
 import { shareImageToX } from '../lib/share'
 import { DownloadShareButton } from './DownloadShareButton'
 
-// Matches the 2-col-by-3-row shape of the mobile grid (see the grid's
-// responsive column counts below) — one fixed page size across every
-// breakpoint rather than a different one per column count, since the hook
-// already fetches up to 48 memes in a single request. Paginating over that
-// already-loaded array client-side is enough for now; real server-side
-// pagination would only start to matter well past that fetch cap.
-const PAGE_SIZE = 6
+// Mobile (2-col grid) keeps 6 — that's 3 clean rows, what was actually
+// asked for originally. A fixed 6 looked wrong once the grid reaches its
+// widest (5-col at xl): confirmed live — 5 on one row, 1 stranded alone on
+// the next, then straight to page 2. 10 fits the wide layouts cleanly
+// instead (2 full rows at 5 columns; a little less even at 3/4 columns,
+// but never a lone straggler by itself).
+const MOBILE_PAGE_SIZE = 6
+const DESKTOP_PAGE_SIZE = 10
 
 function agoFrom(iso: string): string {
   return formatTimeAgo((Date.now() - new Date(iso).getTime()) / 1000)
@@ -33,6 +35,13 @@ export function MemeWall() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+
+  // Matches the grid's own `sm:` breakpoint (640px, Tailwind's real
+  // default — confirmed no custom override in tailwind.config before
+  // relying on that number here) so the page size lines up with whichever
+  // column count is actually showing.
+  const isDesktop = useMediaQuery('(min-width: 640px)')
+  const PAGE_SIZE = isDesktop ? DESKTOP_PAGE_SIZE : MOBILE_PAGE_SIZE
 
   const [page, setPage] = useState(0)
   // Switching TOP/RECENT reorders the whole list — "page 3" of one sort
