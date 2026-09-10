@@ -1,9 +1,17 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useActiveWallet } from '../hooks/useActiveWallet'
 import { useMemeWall, type Meme } from '../hooks/useMemeWall'
 import { formatTimeAgo } from '../lib/format'
 import { shareImageToX } from '../lib/share'
 import { DownloadShareButton } from './DownloadShareButton'
+
+// Matches the 2-col-by-3-row shape of the mobile grid (see the grid's
+// responsive column counts below) — one fixed page size across every
+// breakpoint rather than a different one per column count, since the hook
+// already fetches up to 48 memes in a single request. Paginating over that
+// already-loaded array client-side is enough for now; real server-side
+// pagination would only start to matter well past that fetch cap.
+const PAGE_SIZE = 6
 
 function agoFrom(iso: string): string {
   return formatTimeAgo((Date.now() - new Date(iso).getTime()) / 1000)
@@ -25,6 +33,23 @@ export function MemeWall() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+
+  const [page, setPage] = useState(0)
+  // Switching TOP/RECENT reorders the whole list — "page 3" of one sort
+  // has no sensible relationship to "page 3" of the other, so land back on
+  // page 1 rather than showing a jarring, seemingly-arbitrary slice.
+  useEffect(() => {
+    setPage(0)
+  }, [sort])
+  const totalPages = Math.max(1, Math.ceil(memes.length / PAGE_SIZE))
+  // Defensive: if the list ever shrinks (e.g. a refetch drops a
+  // now-hidden meme) while sitting on a later page, clamp back rather than
+  // silently render an empty grid with no "no memes" message to explain it
+  // (that message only checks memes.length, not the current page's slice).
+  useEffect(() => {
+    if (page > totalPages - 1) setPage(totalPages - 1)
+  }, [page, totalPages])
+  const pageMemes = memes.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
 
   function handleUploadClick() {
     if (!connected) {
@@ -123,15 +148,39 @@ export function MemeWall() {
       )}
 
       {!loading && !error && memes.length > 0 && (
-        // Was a single auto-fill column with a 200px minimum — on mobile
-        // that only ever fit one full-width card per row, reading as an
-        // endless single-file scroll. Explicit column counts instead of
-        // minmax auto-fill guarantee 2-up even on a narrow phone.
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3.5 lg:grid-cols-4 xl:grid-cols-5">
-          {memes.map((meme) => (
-            <MemeCard key={meme.id} meme={meme} voted={myVotes.has(meme.id)} canVote={!!wallet} onUpvote={upvote} onReport={report} />
-          ))}
-        </div>
+        <>
+          {/* Was a single auto-fill column with a 200px minimum — on mobile
+              that only ever fit one full-width card per row, reading as an
+              endless single-file scroll. Explicit column counts instead of
+              minmax auto-fill guarantee 2-up even on a narrow phone. */}
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3.5 lg:grid-cols-4 xl:grid-cols-5">
+            {pageMemes.map((meme) => (
+              <MemeCard key={meme.id} meme={meme} voted={myVotes.has(meme.id)} canVote={!!wallet} onUpvote={upvote} onReport={report} />
+            ))}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-center gap-3.5 font-mono text-[11.5px]">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="rounded-lg border border-line px-3 py-1.5 text-ink-muted hover:border-line-strong hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ← PREV
+              </button>
+              <span className="text-ink-faint">
+                PAGE {page + 1} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="rounded-lg border border-line px-3 py-1.5 text-ink-muted hover:border-line-strong hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                NEXT →
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       <div className="mt-3 font-mono text-[10.5px] text-ink-dim">
