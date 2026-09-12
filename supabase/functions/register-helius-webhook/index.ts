@@ -1,20 +1,31 @@
-import { corsHeaders } from '../_shared/cors.ts'
-import { KNOWN_POOL_ADDRESSES } from '../_shared/constants.ts'
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, solana-client, x-cron-secret',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
 
-// One-off setup endpoint, not part of the app's runtime — run it once by
-// hand (curl, gated by CRON_SECRET like the other internal endpoints) to
-// register the Helius webhook, then it's done; Helius calls
-// helius-swap-webhook directly from then on. Reuses the already-configured
-// HELIUS_RPC_URL secret to extract the API key needed for Helius's own
-// management API, so the raw key never has to be re-entered anywhere.
+const KNOWN_POOL_ADDRESSES = [
+  '937nYYCPzqygDm71FX5XJzepDCnJLca9GSfe5essZK2H',
+  '3vnFSkGU2foSKWsbH5pEJ6HFstugb5YBELkRGgUdJAeA',
+  '63TL5RqBnTeLWK96sk9rUBEBWxmVFcWkDHGNP1vaYz3P',
+  'GpDb6iSBYzqESg3D6dyDUWghCEMgLdZKNYZ4rLGVkQYL',
+  'DYrsQFyEvGCRdDMHMSNpM2SPnHLZDcJeuNyCqf7pbRM2',
+  '9zwRDc7jqvp2gZ4Uo9LNEzuRddzRGckBXJVyLmQA1GBf',
+  'W7hiFYAfx7QjySs4mzCeNysLig3p8GzRMCpKdAs98o1',
+  '4Ny7ihkR5qU8ZpnwT4bfv7gaVsrEcP9QdGXGwK7WPiuQ',
+  'EWxEa2gg1QPjrnXNV5Z9rqapGhJr34LFjTXYqXuUSBS4',
+  '8iuX8avSY3N7QtNo2nZoqYYox23fSxaycGxxCJhVcNZg',
+  '8zKKPswFpJNBou7M4yQ1UFJVdkPDMxagV4RquFCfKLjH',
+  'HFWpwj3bzdMDo7XgeCeVdWvmLnzn2q19NuxF7QTMPV9Y',
+  '2fkZpFY4r8UedwWE7NPw165d2fn84KyWztiji81iGAMz',
+  'HjHy9KZHk2N6hUgnSoQFUcU9oVC6BaQ1qHTNbzRSTsMe',
+  '53zygLLzcbgrnYzvu3yKCvuFK7w7ZUBmv3ifDLXhtPF',
+]
+
 const CRON_SECRET = Deno.env.get('CRON_SECRET')
 const HELIUS_SECRET = Deno.env.get('HELIUS_RPC_URL')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 
-// The pools that actually carry NASDUCK's volume, largest four by
-// liquidity per DexScreener (PumpSwap + the biggest three Meteora pools) —
-// not every pool in KNOWN_POOL_ADDRESSES, to keep the webhook focused on
-// where real trades happen.
 const WATCHED_POOLS = [
   '937nYYCPzqygDm71FX5XJzepDCnJLca9GSfe5essZK2H',
   '3vnFSkGU2foSKWsbH5pEJ6HFstugb5YBELkRGgUdJAeA',
@@ -35,21 +46,39 @@ Deno.serve(async (req) => {
     const apiKey = extractApiKey(HELIUS_SECRET)
     const webhookURL = `${SUPABASE_URL}/functions/v1/helius-swap-webhook`
 
+    // Confirmed live: the original registration included 'TRANSFER' in
+    // transactionTypes alongside 'SWAP'. helius-swap-webhook's own classify()
+    // never actually checks the Helius-assigned transaction type at all — it
+    // just inspects tokenTransfers directly — so 'TRANSFER' events were
+    // being delivered, fully processed, and then discarded by pool-address
+    // matching for the vast majority of calls (27,831 invocations/day vs
+    // 5,766 real whale_trades rows — ~79% produced nothing). Every
+    // invocation is billed regardless of outcome; this single line was
+    // responsible for the bulk of nasduck-hub's edge function usage.
+    // 'SWAP' alone is what the whale feed actually needs — legitimate swaps
+    // against PumpSwap/Meteora DLMM (this project's real pools) are
+    // reliably classified as 'SWAP' by Helius's enhanced parser already, so
+    // dropping 'TRANSFER' costs nothing functionally.
+    //
+    // Re-registering with fixed settings alone isn't enough: Helius holds
+    // whatever config was set at creation time and doesn't re-read this
+    // function's source, so this also has to find and delete the existing
+    // webhook first — otherwise this would create a second, duplicate
+    // webhook alongside the old TRANSFER-inclusive one rather than fixing
+    // it.
+    const existingRes = await fetch(`https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`)
+    const existing = existingRes.ok ? ((await existingRes.json()) as { webhookID: string; webhookURL: string }[]) : []
+    const stale = existing.filter((w) => w.webhookURL === webhookURL)
+    for (const w of stale) {
+      await fetch(`https://api.helius.xyz/v0/webhooks/${w.webhookID}?api-key=${apiKey}`, { method: 'DELETE' })
+    }
+
     const res = await fetch(`https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         webhookURL,
-        // Confirmed live: transactionTypes is required, no "all types"
-        // literal exists (verified — "UNKNOWN" specifically means
-        // *unclassified*, the opposite of a catch-all). SWAP + TRANSFER
-        // cast a deliberately wide net: the wrapper/router programs
-        // NASDUCK's real swaps route through (found live earlier — not
-        // standard aggregators) make it unclear Helius would always tag
-        // them "SWAP" correctly, but it populates tokenTransfers for
-        // either type — helius-swap-webhook classifies from those raw
-        // transfers itself regardless of Helius's own type label.
-        transactionTypes: ['SWAP', 'TRANSFER'],
+        transactionTypes: ['SWAP'],
         accountAddresses: WATCHED_POOLS,
         webhookType: 'enhanced',
         authHeader: CRON_SECRET,
@@ -59,7 +88,7 @@ Deno.serve(async (req) => {
     const data = await res.json()
     if (!res.ok) return json({ error: data }, res.status)
 
-    return json({ ok: true, webhookID: data.webhookID, watching: WATCHED_POOLS })
+    return json({ ok: true, webhookID: data.webhookID, watching: WATCHED_POOLS, deletedStale: stale.length })
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : 'unexpected error' }, 500)
   }
