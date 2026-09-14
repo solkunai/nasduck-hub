@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { resizeImageForUpload } from '../lib/resizeImage'
 
 export interface Meme {
   id: number
@@ -132,10 +133,17 @@ export function useMemeWall(wallet: string | null) {
   const upload = useCallback(
     async (file: File, caption: string) => {
       if (!wallet) throw new Error('connect a wallet first')
-      const ext = file.name.split('.').pop() ?? 'jpg'
+
+      // Resize/recompress before it ever reaches Storage — real uploads
+      // were averaging ~1.9MB with nothing shrinking them, and the meme
+      // wall shows 6-10 of these per page load. See lib/resizeImage.ts for
+      // the full reasoning (this is what fixed a real Supabase bandwidth
+      // overage, not a preemptive optimization).
+      const uploadFile = await resizeImageForUpload(file)
+      const ext = uploadFile.name.split('.').pop() ?? 'jpg'
       const path = `${wallet}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
 
-      const up = await supabase.storage.from('memes').upload(path, file)
+      const up = await supabase.storage.from('memes').upload(path, uploadFile)
       if (up.error) throw new Error(up.error.message)
 
       const insert = await supabase.from('memes').insert({ wallet, image_path: path, caption }).select().single()
