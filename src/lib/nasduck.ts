@@ -1,6 +1,15 @@
 export const NASDUCK_MINT = '7Y7V1a4m2nWK7BMgbka5B4vR1pDvCK7yva3Hnrqkraze'
 export const WSOL_MINT = 'So11111111111111111111111111111111111111112'
 
+// Confirmed live via DexScreener's own API as the current highest-liquidity
+// pair (same one MarketProvider's live lookup independently picks). Used
+// only as an initial value so the price chart iframe can mount on first
+// paint instead of showing a spinner for the ~1-2s round trip to confirm it
+// — MarketProvider's slow-lane fetch still overwrites this within seconds
+// of mount and keeps it live from then on, so a future liquidity migration
+// self-corrects almost immediately rather than needing a code change here.
+export const NASDUCK_FALLBACK_PAIR = '937nYYCPzqygDm71FX5XJzepDCnJLca9GSfe5essZK2H'
+
 // Confirmed via getAccountInfo: NASDUCK is a Token-2022 mint (owner
 // TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb, not classic SPL), 6 decimals,
 // mintAuthority/freezeAuthority both null (supply is fixed, no team mint or

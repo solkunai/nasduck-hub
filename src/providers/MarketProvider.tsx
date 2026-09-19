@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { fetchTokenMarket, fetchJupiterPrices, fetchHolderCount } from '../lib/prices'
-import { NASDUCK_MINT, WSOL_MINT } from '../lib/nasduck'
+import { NASDUCK_MINT, WSOL_MINT, NASDUCK_FALLBACK_PAIR } from '../lib/nasduck'
 
 export interface Market {
   price: number
@@ -22,7 +22,11 @@ const fallback: Market = {
   liquidityUsd: 0,
   holders: 0,
   solPrice: 0,
-  pairAddress: null,
+  // Not null — see NASDUCK_FALLBACK_PAIR's own comment. Lets PriceChart
+  // mount the DexScreener iframe on first render instead of showing its
+  // "loading chart…" placeholder for the full round trip this provider's
+  // own slow-lane fetch takes to confirm the pair address live.
+  pairAddress: NASDUCK_FALLBACK_PAIR,
   live: false,
 }
 
