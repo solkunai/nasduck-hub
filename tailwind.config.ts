@@ -54,12 +54,6 @@ export default {
         },
         ndMarquee: { from: { transform: 'translateX(0)' }, to: { transform: 'translateX(-50%)' } },
         ndIn: { from: { opacity: '0', transform: 'translateY(-8px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
-        ndBurst: {
-          '0%': { opacity: '0', transform: 'scale(.9)' },
-          '12%': { opacity: '1', transform: 'scale(1)' },
-          '78%': { opacity: '1' },
-          '100%': { opacity: '0', transform: 'scale(1.05)' },
-        },
         ndPulse: { '0%,100%': { opacity: '.35' }, '50%': { opacity: '1' } },
       },
       animation: {
@@ -68,7 +62,6 @@ export default {
         ndDip: 'ndDip 3.4s ease-in-out infinite',
         ndMarquee: 'ndMarquee 38s linear infinite',
         ndIn: 'ndIn .4s ease',
-        ndBurst: 'ndBurst 2.6s ease forwards',
         ndPulse: 'ndPulse 1.6s ease-in-out infinite',
       },
     },
