@@ -8,7 +8,7 @@ export interface ClickerLeader {
 
 const FLUSH_INTERVAL_MS = 1500
 
-export function useClickerGame(wallet: string | null) {
+export function useClickerGame(wallet: string | null, leaderboardActive: boolean) {
   const [score, setScore] = useState(0)
   const [leaders, setLeaders] = useState<ClickerLeader[]>([])
   const pendingRef = useRef(0)
@@ -32,11 +32,22 @@ export function useClickerGame(wallet: string | null) {
       .then(({ data }) => setScore(data ? Number(data.score) : 0))
   }, [wallet])
 
+  // Confirmed live and root-caused during the Supabase usage-cap incident:
+  // this hook is mounted unconditionally as part of the homepage (the
+  // clicker section renders regardless of whether its accordion is
+  // expanded), so a plain always-on interval here meant every single
+  // visitor generated a clicker_scores query every 20 seconds for as long
+  // as they kept the tab open — completely independent of whether they
+  // ever touched the game. Gated behind the panel actually being open
+  // instead, same "only poll what's actually visible/relevant" principle
+  // already used elsewhere (useJupiterOrder checks document.visibilityState
+  // the same way).
   useEffect(() => {
+    if (!leaderboardActive) return
     loadLeaders()
     const id = setInterval(loadLeaders, 20_000)
     return () => clearInterval(id)
-  }, [loadLeaders])
+  }, [loadLeaders, leaderboardActive])
 
   const flush = useCallback(async () => {
     if (!wallet || flushingRef.current || pendingRef.current === 0) return

@@ -20,8 +20,8 @@ function playQuack() {
 export function ClickerGame() {
   const { publicKey, connected } = useActiveWallet()
   const wallet = publicKey?.toBase58() ?? null
-  const { score, leaders, feed } = useClickerGame(wallet)
   const [open, setOpen] = useState(false)
+  const { score, leaders, feed } = useClickerGame(wallet, open)
   const [pressed, setPressed] = useState(false)
 
   // Landing.tsx's hash-scroll effect gets a visitor to this section, but a
