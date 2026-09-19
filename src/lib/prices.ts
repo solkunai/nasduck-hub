@@ -24,13 +24,23 @@ export interface TokenMarket {
 
 const MAJOR_QUOTE_SYMBOLS = new Set(['SOL', 'USDC', 'USDT'])
 const MAX_HOURLY_CHANGE_PCT = 1000
+// Confirmed live: NASDUCK briefly showed a $2.3M mcap (real was ~$650K)
+// because two near-dead Raydium pools ($2.54 and $14.52 of liquidity) can
+// report almost any price off a single dust trade. With those still in the
+// candidate pool, the unweighted median below landed ON one of them, which
+// then made the "reject anything far from the median" step throw out both
+// real, liquid pairs instead. Dropping negligible-liquidity pools before
+// the median is computed keeps the reference price itself from being
+// corrupted by a broken pool, rather than just filtering after the fact.
+const MIN_LIQUIDITY_USD = 1000
 
 // DexScreener returns every pair a token appears in, including thin/broken
 // pools that can report wildly wrong prices. Filter obvious outliers,
-// prefer major-quote pairs, then reject anything still far from the median
-// before picking by liquidity. (Defensive logic proven necessary on a prior
-// project, where an unfiltered pick once reported a $3.1T market cap off
-// a single broken pump.fun pool.)
+// drop negligible-liquidity pools, prefer major-quote pairs, then reject
+// anything still far from the median before picking by liquidity.
+// (Defensive logic proven necessary on a prior project, where an
+// unfiltered pick once reported a $3.1T market cap off a single broken
+// pump.fun pool.)
 function pickBase(pairs: DexPair[], mint: string): TokenMarket | null {
   let candidates = pairs.filter((p) => {
     if (p.baseToken?.address !== mint) return false
@@ -41,6 +51,9 @@ function pickBase(pairs: DexPair[], mint: string): TokenMarket | null {
     return true
   })
   if (!candidates.length) return null
+
+  const substantive = candidates.filter((p) => (p.liquidity?.usd ?? 0) >= MIN_LIQUIDITY_USD)
+  if (substantive.length) candidates = substantive
 
   const majorQuoted = candidates.filter((p) => MAJOR_QUOTE_SYMBOLS.has(p.quoteToken?.symbol ?? ''))
   if (majorQuoted.length) candidates = majorQuoted
