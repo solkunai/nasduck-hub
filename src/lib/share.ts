@@ -39,7 +39,17 @@ export async function shareImageToX(imageUrl: string, text: string, filename: st
   }
 
   await downloadImage(imageUrl, filename).catch(() => {})
+  openTweetIntent(text)
+  return 'intent'
+}
+
+// Always goes straight to X's compose window — no native share-sheet detour.
+// Use this (instead of shareImageToX) when the button's own label promises
+// "X" specifically rather than a generic share action; shareImageToX's
+// share-sheet-first behavior is right when the goal is actually attaching
+// the image file, but that's not always what a "flex on X"-style button
+// means to the person clicking it.
+export function openTweetIntent(text: string): void {
   const params = new URLSearchParams({ text })
   window.open(`https://twitter.com/intent/tweet?${params.toString()}`, '_blank', 'noopener,noreferrer')
-  return 'intent'
 }

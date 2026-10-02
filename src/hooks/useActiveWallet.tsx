@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useMemo } from 'react'
+import { createContext, useCallback, useContext, useMemo, useRef } from 'react'
 import { PublicKey, VersionedTransaction } from '@solana/web3.js'
-import type { usePrivy as UsePrivy } from '@privy-io/react-auth'
+import type { usePrivy as UsePrivy, useLogin as UseLogin } from '@privy-io/react-auth'
 import type {
   ConnectedStandardSolanaWallet,
   useExportWallet as UseExportWallet,
@@ -13,7 +13,11 @@ export interface ActiveWallet {
   connected: boolean
   publicKey: PublicKey | null
   signTransaction: ((tx: VersionedTransaction) => Promise<VersionedTransaction>) | undefined
-  login: () => void
+  // onError fires when the login modal closes without completing (user hit
+  // the X, picked a wallet and rejected the connection, etc.) — lets callers
+  // like the mint page's floor-pass badge show a real "failed, try again"
+  // state instead of sitting on "reading…" until a 45s fallback timeout.
+  login: (onError?: () => void) => void
   logout: () => Promise<void>
   isEmbedded: boolean
   canExport: boolean
@@ -64,20 +68,37 @@ export function useActiveWallet(): ActiveWallet {
 export function PrivyActiveWalletPublisher({
   children,
   usePrivyHook,
+  useLoginHook,
   useWalletsHook,
   useSignTransactionHook,
   useExportWalletHook,
 }: {
   children: React.ReactNode
   usePrivyHook: typeof UsePrivy
+  useLoginHook: typeof UseLogin
   useWalletsHook: typeof UseWallets
   useSignTransactionHook: typeof UseSignTransaction
   useExportWalletHook: typeof UseExportWallet
 }) {
-  const { ready: privyReady, authenticated, login, logout, user } = usePrivyHook()
+  const { ready: privyReady, authenticated, logout, user } = usePrivyHook()
   const { ready: walletsReady, wallets } = useWalletsHook()
   const { signTransaction: privySignTransaction } = useSignTransactionHook()
   const { exportWallet: privyExportWallet } = useExportWalletHook()
+
+  // useLogin's onError is fixed at hook-setup time, not per-call — this ref
+  // lets each login(onError) call supply its own handler anyway, since the
+  // hook's own onError just forwards to whatever's currently in the ref.
+  const onLoginErrorRef = useRef<(() => void) | undefined>(undefined)
+  const { login: privyLogin } = useLoginHook({
+    onError: () => onLoginErrorRef.current?.(),
+  })
+  const login = useCallback(
+    (onError?: () => void) => {
+      onLoginErrorRef.current = onError
+      privyLogin()
+    },
+    [privyLogin],
+  )
 
   // A user can in principle have more than one Solana wallet linked
   // (embedded + an external one), but this app only ever acts on one at a

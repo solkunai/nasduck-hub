@@ -13,6 +13,7 @@ const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID || ''
 interface PrivyModules {
   PrivyProvider: typeof import('@privy-io/react-auth').PrivyProvider
   usePrivy: typeof import('@privy-io/react-auth').usePrivy
+  useLogin: typeof import('@privy-io/react-auth').useLogin
   useWallets: typeof import('@privy-io/react-auth/solana').useWallets
   useSignTransaction: typeof import('@privy-io/react-auth/solana').useSignTransaction
   useExportWallet: typeof import('@privy-io/react-auth/solana').useExportWallet
@@ -41,6 +42,7 @@ function loadPrivyModules(): Promise<PrivyModules> {
     ([core, solana]) => ({
       PrivyProvider: core.PrivyProvider,
       usePrivy: core.usePrivy,
+      useLogin: core.useLogin,
       useWallets: solana.useWallets,
       useSignTransaction: solana.useSignTransaction,
       useExportWallet: solana.useExportWallet,
@@ -119,6 +121,12 @@ export function AppProviders({ children }: { children: ReactNode }) {
           // leaving this unset would hide external Solana wallets (Phantom,
           // Solflare, Backpack) from the login modal entirely.
           walletChainType: 'solana-only',
+          // Without this, an installed wallet extension still only shows up
+          // inside a generic searchable list instead of as a one-click top
+          // option — named wallets are pinned to these positions regardless
+          // of detection, and 'detected_solana_wallets' covers anything else
+          // the visitor has installed that isn't explicitly listed.
+          walletList: ['phantom', 'solflare', 'backpack', 'detected_solana_wallets'],
         },
         embeddedWallets: {
           // Creates a Solana embedded wallet automatically for anyone who
@@ -139,6 +147,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     >
       <PrivyActiveWalletPublisher
         usePrivyHook={hooks.usePrivy}
+        useLoginHook={hooks.useLogin}
         useWalletsHook={hooks.useWallets}
         useSignTransactionHook={hooks.useSignTransaction}
         useExportWalletHook={hooks.useExportWallet}

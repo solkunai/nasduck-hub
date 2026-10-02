@@ -37,6 +37,11 @@ export default {
         display: ['"Archivo Black"', 'system-ui', 'sans-serif'],
         sans: ['Archivo', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        // Mint page only — the "Wall Street trading floor" pixel aesthetic
+        // is deliberately distinct from the rest of the site's type system.
+        silkscreen: ['Silkscreen', 'monospace'],
+        pixelify: ['"Pixelify Sans"', 'monospace'],
+        terminal: ['VT323', 'monospace'],
       },
       keyframes: {
         ndFloat: {
@@ -55,6 +60,15 @@ export default {
         ndMarquee: { from: { transform: 'translateX(0)' }, to: { transform: 'translateX(-50%)' } },
         ndIn: { from: { opacity: '0', transform: 'translateY(-8px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
         ndPulse: { '0%,100%': { opacity: '.35' }, '50%': { opacity: '1' } },
+        // Mint page
+        mintMarquee: { from: { transform: 'translateX(0)' }, to: { transform: 'translateX(-50%)' } },
+        mintFall: { '0%': { transform: 'translateY(-12vh) rotate(0deg)' }, '100%': { transform: 'translateY(115vh) rotate(540deg)' } },
+        mintSway: { '0%,100%': { marginLeft: '0' }, '50%': { marginLeft: '40px' } },
+        mintSwipe: { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(46px)' } },
+        mintScan: { '0%': { top: '0' }, '100%': { top: '100%' } },
+        mintStamp: { from: { opacity: '0', transform: 'scale(1.8) rotate(-8deg)' }, to: { opacity: '1', transform: 'scale(1) rotate(-8deg)' } },
+        mintPop: { from: { opacity: '0', transform: 'scale(.92)' }, to: { opacity: '1', transform: 'scale(1)' } },
+        mintSheetUp: { from: { opacity: '0', transform: 'translateY(40px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
       },
       animation: {
         ndFloat: 'ndFloat 5s ease-in-out infinite',
@@ -63,6 +77,18 @@ export default {
         ndMarquee: 'ndMarquee 38s linear infinite',
         ndIn: 'ndIn .4s ease',
         ndPulse: 'ndPulse 1.6s ease-in-out infinite',
+        // Mint page
+        mintMarquee: 'mintMarquee 36s linear infinite',
+        // Duration/delay overridden per-instance via inline style in
+        // MoneyRain.tsx (each bill falls/sways at a different speed) — the
+        // values here are just placeholders Tailwind needs to emit the class.
+        mintFall: 'mintFall 7s linear infinite',
+        mintSway: 'mintSway 3s ease-in-out infinite',
+        mintSwipe: 'mintSwipe 1.5s ease-in-out',
+        mintScan: 'mintScan .7s linear infinite alternate',
+        mintStamp: 'mintStamp .3s ease-out',
+        mintPop: 'mintPop .22s ease-out',
+        mintSheetUp: 'mintSheetUp .22s ease-out',
       },
     },
   },
