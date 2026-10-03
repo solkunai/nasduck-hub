@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import type { MintStage } from '../../hooks/useMintFlow'
 import { formatNumber } from '../../lib/format'
+import { MINT_LIVE } from '../../lib/mint/config'
 
 interface TradingFloorProps {
   walletShort: string
@@ -11,7 +12,6 @@ interface TradingFloorProps {
   usdPricePerMint: number
   nasduckPerMint: number
   priceLive: boolean
-  maxPer: number
   qty: number
   dec: () => void
   inc: () => void
@@ -29,7 +29,6 @@ export function TradingFloor({
   usdPricePerMint,
   nasduckPerMint,
   priceLive,
-  maxPer,
   qty,
   dec,
   inc,
@@ -61,6 +60,10 @@ export function TradingFloor({
     ctaLabel = 'SETTLING ON SOLANA…'
     ctaBg = '#0B1220'
     ctaFg = '#6FBE44'
+  } else if (!MINT_LIVE) {
+    ctaLabel = 'MINT OPENS SOON'
+    ctaBg = '#0B1220'
+    ctaFg = '#7E97BD'
   }
 
   return (
@@ -139,7 +142,7 @@ export function TradingFloor({
         </div>
         <div className="bg-[#0B1220] p-2.5">
           <div className="text-[#F0E4CC]">PER WALLET</div>
-          <div className="text-[20px] text-[#F0E4CC]">{maxPer}</div>
+          <div className="text-[20px] text-[#6FBE44]">NO LIMIT</div>
         </div>
         <div className="bg-[#0B1220] p-2.5">
           <div className="text-[#F0E4CC]">ELIGIBLE</div>
@@ -183,7 +186,7 @@ export function TradingFloor({
       <button
         type="button"
         onClick={onMint}
-        disabled={stage !== 'idle'}
+        disabled={stage !== 'idle' || !MINT_LIVE}
         className="mt-4 w-full py-4 font-pixelify text-[26px] font-bold"
         style={{ background: ctaBg, color: ctaFg }}
       >

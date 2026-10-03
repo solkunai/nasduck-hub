@@ -39,7 +39,7 @@ export function Mint() {
 
         <div className="flex flex-wrap items-center justify-center gap-4 px-3 py-3 min-[700px]:justify-between min-[700px]:px-5 min-[700px]:py-4">
           <div className="flex items-center gap-2.5">
-            <img src="/mascot/nasduck-logo.jpg" alt="NASDUCK" className="h-[30px] w-[30px] rounded-full object-cover" />
+            <img src="/mint/nasduck-badge.jpg" alt="NASDUCK" className="h-[30px] w-[30px] rounded-full object-cover" />
             <div className="font-pixelify text-[20px] font-bold text-[#F7E7C1]">NASDUCKS</div>
           </div>
           <div className="flex items-center gap-2">
@@ -102,7 +102,15 @@ export function Mint() {
             <YourDucksCard mine={m.mine} sel={m.sel} onSelect={m.setSel} />
 
             <div
-              className="w-full min-w-0 flex-1 border-4 border-[#15191E] p-3 outline outline-[3px] outline-[#F5911E] min-[700px]:border-[8px] min-[700px]:p-[18px] sm:min-w-[440px] [background:#02060E] [background-image:radial-gradient(rgba(111,190,68,.08)_1px,transparent_1.5px)] [background-size:4px_4px] [box-shadow:0_30px_60px_rgba(0,0,0,.6),0_0_60px_rgba(111,190,68,.25)]"
+              className="w-full min-w-0 flex-1 p-4 sm:min-w-[440px] min-[700px]:p-6 [box-shadow:0_30px_60px_rgba(0,0,0,.6),0_0_60px_rgba(111,190,68,.25)]"
+              style={{
+                borderImageSource: 'url(/mint/floor_access_frame.png)',
+                borderImageSlice: '110 150 110 150',
+                borderImageWidth: '40px',
+                borderImageRepeat: 'stretch',
+                borderStyle: 'solid',
+                borderWidth: '40px',
+              }}
             >
               {!connected ? (
                 <FloorPass gate={m.gate} connected={connected} onSwipe={m.badgeIn} mintedStr={m.mintedStr} remainingStr={m.remainingStr} />
@@ -116,7 +124,6 @@ export function Mint() {
                   usdPricePerMint={m.usdPricePerMint}
                   nasduckPerMint={m.nasduckPerMint}
                   priceLive={m.priceLive}
-                  maxPer={m.maxPerWallet}
                   qty={m.qty}
                   dec={m.dec}
                   inc={m.inc}

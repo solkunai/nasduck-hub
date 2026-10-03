@@ -2,16 +2,21 @@
 // flat per-wallet limit for everyone). Once a real Candy Machine exists,
 // replace MINT_START (the mock "already minted" baseline) with live
 // `itemsRedeemed` read from it.
+// Kill switch for sharing the page as a preview (e.g. with the NasDuck team)
+// before the real mint is ready. When false, the buy button is disabled and
+// just reads "MINT OPENS SOON" — wallet connect and everything else on the
+// page still works normally. Flip to true once the real Candy Machine is
+// live and wired up.
+export const MINT_LIVE = false
+
 export const SUPPLY = 4444
 
 // $5 USD per duck, paid in $NASDUCK. Actual token amount is computed live
 // from useMarket().price, not stored here — see useMintFlow.
 export const USD_PRICE_PER_MINT = 5
 
-export const MAX_PER_WALLET = 10
-
 /** Mock baseline for "already minted" on page load — placeholder only. */
-export const MINT_START = 2941
+export const MINT_START = 0
 
 // Shared between the desktop full-width strip (Mint.tsx) and the mobile
 // bottom sheet (FloorPass.tsx) — same four facts, different container.
@@ -34,35 +39,29 @@ export const FINE_PRINT_ITEMS = [
   ['ELIGIBILITY', 'You must be legally able to hold crypto assets in your jurisdiction to mint.'],
 ] as const
 
-// Placeholder rarity summary from the design handoff — NOT the real tiers
-// computed from the actual 7-category trait set. Replace once metadata.csv
-// is regenerated with Background/Skin/Body/NeckAccessory/Mouth/EyesAccessory/Hat.
-export const PLACEHOLDER_RARITY = [
-  { tier: 'COMMON', count: 2444, pct: '100%', color: '#C9D3E3' },
-  { tier: 'UNCOMMON', count: 1111, pct: '46%', color: '#F7E7C1' },
-  { tier: 'RARE', count: 578, pct: '24%', color: '#6FBE44' },
-  { tier: 'EPIC', count: 301, pct: '13%', color: '#F5911E' },
-  { tier: 'LEGEND', count: 10, pct: '2%', color: '#FFC522' },
+// Real tier breakdown, computed from the actual generated 4,444-item
+// collection (public/mint/collection.json) — bucketed by each NFT's
+// nftexport-computed rank: top 100 = Legendary (includes all 5 1-of-1s),
+// next 400 = Rare, next 1,200 = Uncommon, remaining 2,744 = Common.
+export const REAL_RARITY = [
+  { tier: 'COMMON', count: 2744, pct: '62%', color: '#C9D3E3' },
+  { tier: 'UNCOMMON', count: 1200, pct: '27%', color: '#F7E7C1' },
+  { tier: 'RARE', count: 400, pct: '9%', color: '#6FBE44' },
+  { tier: 'LEGENDARY', count: 100, pct: '2%', color: '#FFC522' },
 ] as const
 
-// Placeholder "pulled" look data for the mock mint flow / reveal — stands in
-// for a real minted NFT's image + attributes until a Candy Machine exists.
-export interface MockLook {
-  id: string
-  fit: string
-  desk: string
-  acc: string
-  bg: string
-  frame: string
-  rarity: string
+export function tierColor(tier: string): string {
+  return REAL_RARITY.find((r) => r.tier === tier)?.color ?? '#C9D3E3'
 }
 
-export const MOCK_LOOKS: MockLook[] = [
-  { id: '#0069', fit: 'Leverage Hoodie', desk: '6 Monitors, All Red', acc: 'Gold Chain', bg: 'Pump Green', frame: '#6FBE44', rarity: 'RARE' },
-  { id: '#1337', fit: 'Trucker Cap Over Swim Cap', desk: 'Semi Truck Cab', acc: 'Toothpick', bg: 'Highway Dusk', frame: '#F5911E', rarity: 'UNCOMMON' },
-  { id: '#0420', fit: 'Pinstripe Suit', desk: 'Bloomberg Terminal', acc: 'Trading Floor Lanyard', bg: 'Ticker Wall', frame: '#FFC522', rarity: 'EPIC' },
-  { id: '#2008', fit: 'Varsity Hoodie "QUACKTON"', desk: 'Dorm Laptop', acc: 'Student Loan Letter', bg: 'Campus Navy', frame: '#F7E7C1', rarity: 'COMMON' },
-]
+// One real NFT's record from public/mint/collection.json.
+export interface CollectionItem {
+  id: string
+  image: string
+  rank: number
+  tier: string
+  attributes: { trait_type: string; value: string; pct: number }[]
+}
 
 export const WALLET_SWATCHES: { name: string; color: string }[] = [
   { name: 'PHANTOM', color: '#AB9FF2' },

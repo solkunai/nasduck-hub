@@ -1,4 +1,4 @@
-import { FINE_PRINT_ITEMS, PLACEHOLDER_RARITY } from '../../lib/mint/config'
+import { FINE_PRINT_ITEMS, REAL_RARITY } from '../../lib/mint/config'
 
 interface ModalShellProps {
   title: string
@@ -30,7 +30,7 @@ export function RarityModal({ onClose }: { onClose: () => void }) {
   return (
     <ModalShell title="RARITY BOOK" onClose={onClose}>
       <div className="space-y-2.5 bg-[#02060E] p-4">
-        {PLACEHOLDER_RARITY.map((r) => (
+        {REAL_RARITY.map((r) => (
           <div key={r.tier} className="flex items-center gap-3 font-terminal text-[21px]">
             <div className="w-[96px] min-[700px]:w-[110px]" style={{ color: r.color }}>{r.tier}</div>
             <div className="h-5 flex-1 bg-[#0B1220]">
@@ -44,7 +44,7 @@ export function RarityModal({ onClose }: { onClose: () => void }) {
         ))}
       </div>
       <p className="mt-4 font-terminal text-[16px] text-[#3B2F1E]/80">
-        10 unique ducks are hiding in the pond, including the Chief Duck Officer and the 4 AM Goggle Incident.
+        5 true 1-of-1s are hiding in the mint — Alien Duck, Blacistheneworange, Duck Ghost, Ducky Wonka, and Pepe Duck. The rarest ranks in the whole collection.
       </p>
     </ModalShell>
   )

@@ -4,25 +4,6 @@ import { buildFlexTweet } from '../../lib/mint/config'
 import { openTweetIntent } from '../../lib/share'
 import { MoneyRain } from './MoneyRain'
 
-interface OrderFilledModalProps {
-  receipt: Receipt
-  recSel: number
-  onSelect: (i: number) => void
-  onClose: () => void
-}
-
-// Placeholder trait display — real metadata per-mint isn't wired up yet
-// (see useMintFlow's onMint comment). Swap for the actual minted NFT's
-// attributes once a real Candy Machine mint is in place.
-const PLACEHOLDER_TRAITS = [
-  { k: 'BASE', v: 'Pink NasDuck', pct: '18%' },
-  { k: 'HEADWEAR', v: 'Tricolor Cap', pct: '6%' },
-  { k: 'EYES', v: 'Green Goggles', pct: '11%' },
-  { k: 'MOUTH', v: 'Bubblegum', pct: '4%' },
-  { k: 'NECK', v: 'Gold Star Bib', pct: '7%' },
-  { k: 'BACKGROUND', v: 'Sky Blue', pct: '22%' },
-]
-
 export function OrderFilledModal({ receipt, recSel, onSelect, onClose }: OrderFilledModalProps) {
   const current = receipt.items[recSel]
 
@@ -47,13 +28,18 @@ export function OrderFilledModal({ receipt, recSel, onSelect, onClose }: OrderFi
         <div className="flex flex-wrap gap-5">
           <div className="w-full min-w-0 flex-1 self-start min-[700px]:min-w-[380px]">
             <div className="relative aspect-square w-full overflow-hidden border-2 border-[#02060E]">
-              <img src="/mint/duck_minted.png" alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
+              <img src={current.image} alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
               <div className="absolute left-2 top-2 bg-[#F7E7C1] px-2 py-1 font-pixelify text-[13px] text-[#081428] [box-shadow:2px_2px_0_#02060E]">
                 NASDUCK {current.id}
               </div>
               <div className="absolute right-2 top-2 bg-[#02060E] px-2 py-1 font-terminal text-[14px]" style={{ color: current.frame }}>
                 {current.rarity}
               </div>
+              {current.rank > 0 && (
+                <div className="absolute bottom-2 right-2 bg-[#02060E]/85 px-2 py-1 font-terminal text-[13px] text-[#F7E7C1]">
+                  RANK #{current.rank} / 4,444
+                </div>
+              )}
             </div>
 
             {receipt.items.length > 1 && (
@@ -68,7 +54,7 @@ export function OrderFilledModal({ receipt, recSel, onSelect, onClose }: OrderFi
                       className="aspect-square overflow-hidden border-2"
                       style={{ borderColor: i === recSel ? '#F5911E' : '#3A4A66' }}
                     >
-                      <img src="/mint/duck_minted.png" alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
+                      <img src={it.image} alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
                     </button>
                   ))}
                 </div>
@@ -80,11 +66,13 @@ export function OrderFilledModal({ receipt, recSel, onSelect, onClose }: OrderFi
             <p className="m-0 mb-4 font-terminal text-[18px] text-[#C9D3E3]">Welcome to the floor. Here's what you pulled.</p>
 
             <div className="mb-4 grid grid-cols-2 gap-2.5">
-              {PLACEHOLDER_TRAITS.map((t) => (
-                <div key={t.k} className="border border-[#1B2F52] p-2">
-                  <div className="font-terminal text-[16px] text-[#5E7699]">{t.k}</div>
-                  <div className="font-terminal text-[22px] text-[#F7E7C1]">{t.v}</div>
-                  <div className="font-terminal text-[15px] text-[#6FBE44]">{t.pct} have this</div>
+              {current.attributes.map((t) => (
+                <div key={t.trait_type} className="border border-[#1B2F52] p-2">
+                  <div className="font-terminal text-[16px] text-[#5E7699]">{t.trait_type.toUpperCase()}</div>
+                  <div className="font-terminal text-[22px] text-[#F7E7C1]">{t.value}</div>
+                  <div className="font-terminal text-[15px] text-[#6FBE44]">
+                    {t.trait_type === '1is1' ? '1 OF 1' : `${t.pct}% have this`}
+                  </div>
                 </div>
               ))}
             </div>

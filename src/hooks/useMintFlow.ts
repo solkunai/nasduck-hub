@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useActiveWallet } from './useActiveWallet'
 import { useMarket } from '../providers/MarketProvider'
-import { MAX_PER_WALLET, MINT_START, MOCK_LOOKS, SUPPLY, USD_PRICE_PER_MINT, fmt, pad } from '../lib/mint/config'
+import { MINT_START, SUPPLY, USD_PRICE_PER_MINT, fmt, pad, tierColor, type CollectionItem } from '../lib/mint/config'
 
 export type GateState = 'idle' | 'reading' | 'granted' | 'failed'
 export type MintStage = 'idle' | 'signing' | 'settling'
@@ -9,8 +9,33 @@ export type PanelKey = 'rarity' | 'info' | null
 
 export interface MintedDuck {
   id: string
+  image: string
   frame: string
   rarity: string
+  rank: number
+  attributes: { trait_type: string; value: string; pct: number }[]
+}
+
+// Real 4,444-item collection (public/mint/collection.json), fetched once and
+// shuffled client-side so each simulated "pull" hands out a real, unique
+// duck (real rank/tier/attributes) instead of the old 4-item MOCK_LOOKS
+// placeholder. Still a simulated draw — no real Candy Machine mint yet —
+// but the duck you get back is a genuine item from the actual generated set.
+let collectionPromise: Promise<CollectionItem[]> | null = null
+function loadShuffledCollection(): Promise<CollectionItem[]> {
+  if (!collectionPromise) {
+    collectionPromise = fetch('/mint/collection.json')
+      .then((r) => r.json())
+      .then((items: CollectionItem[]) => {
+        const shuffled = items.slice()
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+        }
+        return shuffled
+      })
+  }
+  return collectionPromise
 }
 
 export interface TapeRow {
@@ -78,6 +103,17 @@ export function useMintFlow() {
   const mintTimeout1 = useRef<number | undefined>(undefined)
   const mintTimeout2 = useRef<number | undefined>(undefined)
 
+  // Real 4,444-item collection, preloaded so it's ready by the time a mint
+  // actually happens (connecting a wallet + the scan animation already takes
+  // a few seconds, plenty of time for this small fetch to land).
+  const collectionRef = useRef<CollectionItem[] | null>(null)
+  const drawIndexRef = useRef(0)
+  useEffect(() => {
+    loadShuffledCollection().then((items) => {
+      collectionRef.current = items
+    })
+  }, [])
+
   // Seed the activity tape with plausible-looking recent history on mount —
   // cosmetic only, matches the prototype's seeded mock tape.
   useEffect(() => {
@@ -103,7 +139,7 @@ export function useMintFlow() {
       if (Math.random() > 0.35) return
       setMinted((cur) => {
         if (cur >= SUPPLY) return cur
-        const q = Math.min(SUPPLY - cur, 1 + Math.floor(Math.random() * Math.min(4, MAX_PER_WALLET)))
+        const q = Math.min(SUPPLY - cur, 1 + Math.floor(Math.random() * 4))
         const row: TapeRow = { time: nowClock(), wallet: randWallet(), qty: q, id: `#${pad(cur + 1)}`, mine: false }
         setTape((t) => [row, ...t].slice(0, 8))
         return cur + q
@@ -188,10 +224,17 @@ export function useMintFlow() {
       mintTimeout2.current = window.setTimeout(() => {
         setMinted((cur) => {
           const q = Math.min(qty, SUPPLY - cur)
+          const pool = collectionRef.current
           const items: MintedDuck[] = Array.from({ length: q }, (_, i) => {
-            const look = MOCK_LOOKS[Math.floor(Math.random() * MOCK_LOOKS.length)]
-            return { id: `#${pad(cur + 1 + i)}`, frame: look.frame, rarity: look.rarity }
+            if (!pool) {
+              // Fallback for the rare case the fetch hasn't resolved yet —
+              // shouldn't normally happen given the wallet-connect delay.
+              return { id: `#${pad(cur + 1 + i)}`, image: '/mint/duck_minted.png', frame: '#C9D3E3', rarity: 'COMMON', rank: 0, attributes: [] }
+            }
+            const picked = pool[(drawIndexRef.current + i) % pool.length]
+            return { id: picked.id, image: picked.image, frame: tierColor(picked.tier), rarity: picked.tier, rank: picked.rank, attributes: picked.attributes }
           })
+          if (pool) drawIndexRef.current += q
           const row: TapeRow = {
             time: nowClock(),
             wallet: `YOU · ${wallet.publicKey ? `${wallet.publicKey.toBase58().slice(0, 4)}…${wallet.publicKey.toBase58().slice(-4)}` : '····'}`,
@@ -210,15 +253,16 @@ export function useMintFlow() {
     }, 1200)
   }, [wallet, stage, qty, nasduckPerMint, badgeIn])
 
+  // No per-wallet cap on the public mint — a wallet can take as much of the
+  // remaining supply as it wants, so the only ceiling here is what's left.
   const dec = useCallback(() => setQty((q) => Math.max(1, q - 1)), [])
-  const inc = useCallback(() => setQty((q) => Math.min(MAX_PER_WALLET, q + 1)), [])
-  const setMaxQty = useCallback(() => setQty(MAX_PER_WALLET), [])
+  const inc = useCallback(() => setQty((q) => Math.min(SUPPLY - minted, q + 1)), [minted])
+  const setMaxQty = useCallback(() => setQty(Math.max(1, SUPPLY - minted)), [minted])
   const closeReceipt = useCallback(() => setReceipt(null), [])
   const togglePanel = useCallback((key: PanelKey) => setPanel((p) => (p === key ? null : key)), [])
 
   return {
     wallet,
-    maxPerWallet: MAX_PER_WALLET,
     usdPricePerMint: USD_PRICE_PER_MINT,
     nasduckPerMint,
     nasduckPriceUsd: market.price,

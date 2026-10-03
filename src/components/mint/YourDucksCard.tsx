@@ -14,11 +14,19 @@ export function YourDucksCard({ mine, sel, onSelect }: YourDucksCardProps) {
 
   return (
     <div
-      className="flex w-full min-w-0 flex-1 flex-col border-[3px] border-[#5A4A30] p-3 [background:linear-gradient(180deg,#E6D7B5,#C7B289)] sm:min-w-[340px] [box-shadow:inset_0_3px_0_#F4EAD2,inset_0_-4px_0_#9C8660,0_30px_60px_rgba(0,0,0,.6)]"
+      className="flex w-full min-w-0 flex-1 flex-col p-4 sm:min-w-[340px] min-[700px]:p-6 [box-shadow:0_30px_60px_rgba(0,0,0,.6)]"
+      style={{
+        borderImageSource: 'url(/mint/your_ducks_frame.png)',
+        borderImageSlice: '100 150 100 150',
+        borderImageWidth: '32px',
+        borderImageRepeat: 'stretch',
+        borderStyle: 'solid',
+        borderWidth: '32px',
+      }}
     >
       <div className="mb-2.5 flex items-center justify-between">
-        <div className="font-pixelify text-[22px] font-bold text-[#3B2F1E]">YOUR DUCKS</div>
-        <div className="font-terminal text-[20px] text-[#3B2F1E]">{mine.length} HELD</div>
+        <div className="font-pixelify text-[22px] font-bold text-[#F5911E]">YOUR DUCKS</div>
+        <div className="font-terminal text-[20px] text-[#F7E7C1]">{mine.length} HELD</div>
       </div>
 
       {!hasDucks ? (
@@ -36,7 +44,7 @@ export function YourDucksCard({ mine, sel, onSelect }: YourDucksCardProps) {
       ) : (
         <div className="flex flex-1 flex-col">
           <div className="relative aspect-square w-full overflow-hidden border-2 border-[#02060E]">
-            <img src="/mint/duck_minted.png" alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
+            <img src={latest.image} alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
             <div className="absolute left-2 top-2 bg-[#F7E7C1] px-2 py-1 font-pixelify text-[13px] text-[#081428] [box-shadow:2px_2px_0_#02060E]">
               NASDUCK {latest.id}
             </div>
@@ -59,7 +67,7 @@ export function YourDucksCard({ mine, sel, onSelect }: YourDucksCardProps) {
                   className="aspect-square overflow-hidden border-2"
                   style={{ borderColor: i === sel ? '#F5911E' : '#3A4A66' }}
                 >
-                  <img src="/mint/duck_minted.png" alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
+                  <img src={d.image} alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
                 </button>
               ))}
             </div>
@@ -80,7 +88,7 @@ export function YourDucksCard({ mine, sel, onSelect }: YourDucksCardProps) {
         </div>
       )}
 
-      <div className="mt-2.5 text-center font-terminal text-[13px] text-[#3B2F1E]/70">
+      <div className="mt-2.5 text-center font-terminal text-[13px] text-[#C9D3E3]/70">
         Your duck appears here the moment the mint settles.
       </div>
     </div>
