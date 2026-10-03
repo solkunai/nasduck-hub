@@ -4,6 +4,13 @@ import { buildFlexTweet } from '../../lib/mint/config'
 import { openTweetIntent } from '../../lib/share'
 import { MoneyRain } from './MoneyRain'
 
+interface OrderFilledModalProps {
+  receipt: Receipt
+  recSel: number
+  onSelect: (i: number) => void
+  onClose: () => void
+}
+
 export function OrderFilledModal({ receipt, recSel, onSelect, onClose }: OrderFilledModalProps) {
   const current = receipt.items[recSel]
 
