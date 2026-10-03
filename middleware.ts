@@ -72,7 +72,14 @@ export default async function middleware(request: Request) {
     const form = await request.formData()
     const submitted = form.get('password')
     if (submitted === correctPassword) {
-      const res = Response.redirect(request.url, 303)
+      // Response.redirect() returns a Response with immutable headers (per
+      // the Fetch spec's "immutable" guard on redirect responses), so
+      // appending Set-Cookie to it afterward throws at runtime. Building
+      // the redirect manually keeps the headers mutable at construction.
+      const res = new Response(null, {
+        status: 303,
+        headers: { Location: request.url },
+      })
       res.headers.append(
         'Set-Cookie',
         `${COOKIE_NAME}=${expectedCookie}; Path=/mint; HttpOnly; Secure; SameSite=Lax; Max-Age=${60 * 60 * 24 * 14}`,
