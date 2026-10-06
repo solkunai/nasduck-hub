@@ -24,3 +24,10 @@ deployer.json
 !.vscode/extensions.json
 .idea/
 *.log
+
+# Full collection traits/ranks: a pre-reveal spoiler, never publish
+public/mint/collection.json
+
+# Supabase CLI local link state
+supabase/.temp/
+candy-machine/supabase/.temp/

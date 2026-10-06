@@ -1,10 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useActiveWallet } from './useActiveWallet'
 import { useMarket } from '../providers/MarketProvider'
-import { MINT_START, SUPPLY, USD_PRICE_PER_MINT, fmt, pad, tierColor, type CollectionItem } from '../lib/mint/config'
+import { MINT_LIVE, SUPPLY, USD_PRICE_PER_MINT, fmt, pad, tierColor, tierForRank, type CollectionItem } from '../lib/mint/config'
+import {
+  authMessage,
+  fetchStatus,
+  prepareMint,
+  readStats,
+  submitMint,
+  subscribeStats,
+  type MintStats,
+  type MintStatus,
+  type SubmitResult,
+  type WalletAuth,
+} from '../lib/mint/api'
+import { fromBase64, toBase58, toBase64 } from '../lib/mint/encoding'
 
 export type GateState = 'idle' | 'reading' | 'granted' | 'failed'
-export type MintStage = 'idle' | 'signing' | 'settling'
+export type MintStage = 'idle' | 'authorizing' | 'signing' | 'settling'
 export type PanelKey = 'rarity' | 'info' | null
 
 export interface MintedDuck {
@@ -13,157 +26,193 @@ export interface MintedDuck {
   frame: string
   rarity: string
   rank: number
-  attributes: { trait_type: string; value: string; pct: number }[]
-}
-
-// Real 4,444-item collection (public/mint/collection.json), fetched once and
-// shuffled client-side so each simulated "pull" hands out a real, unique
-// duck (real rank/tier/attributes) instead of the old 4-item MOCK_LOOKS
-// placeholder. Still a simulated draw — no real Candy Machine mint yet —
-// but the duck you get back is a genuine item from the actual generated set.
-let collectionPromise: Promise<CollectionItem[]> | null = null
-function loadShuffledCollection(): Promise<CollectionItem[]> {
-  if (!collectionPromise) {
-    collectionPromise = fetch('/mint/collection.json')
-      .then((r) => r.json())
-      .then((items: CollectionItem[]) => {
-        const shuffled = items.slice()
-        for (let i = shuffled.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1))
-          ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-        }
-        return shuffled
-      })
-  }
-  return collectionPromise
-}
-
-export interface TapeRow {
-  time: string
-  wallet: string
-  qty: number
-  id: string
-  mine: boolean
+  // pct is null when the collection-wide stats file isn't available.
+  attributes: { trait_type: string; value: string; pct: number | null }[]
 }
 
 export interface Receipt {
   items: MintedDuck[]
   qty: number
-  /** Total $NASDUCK charged (token count, not USD) — whole tokens. */
+  /** Total $NASDUCK actually charged (whole tokens). */
   total: number
+  otcCount: number
+  otcEach: number
+  publicCount: number
+  publicEach: number
 }
 
-const randWallet = () => {
-  const c = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-  let a = ''
-  let b = ''
-  for (let i = 0; i < 4; i++) {
-    a += c[Math.floor(Math.random() * c.length)]
-    b += c[Math.floor(Math.random() * c.length)]
+// The backend caps each request at 30 per tier; bigger orders run in batches
+// (one wallet approval per batch).
+const MAX_PER_TIER_PER_BATCH = 30
+// Live numbers are pushed to every open page (Realtime). Each page only asks
+// the backend for a refresh when it hasn't seen an update for STATS_STALE_MS,
+// and the backend re-reads the chain at most once per ~10s for everyone, so
+// a crowd of visitors doesn't multiply RPC/API usage.
+const STATS_CHECK_MS = 15_000
+const STATS_STALE_MS = 25_000
+// Wallet balances/desks are fetched on connect, after a mint, and when the
+// tab regains focus — at most this often.
+const WALLET_REFRESH_MIN_MS = 30_000
+// Each new duck is its own on-chain account (~0.0025 SOL rent) plus network
+// fees — a deliberately generous per-duck estimate for the pre-check.
+const LAMPORTS_PER_DUCK_ESTIMATE = 3_200_000
+// The signed OTC message is accepted for 10 minutes; reuse it for 9.
+const AUTH_REUSE_MS = 9 * 60_000
+
+// Optional per-trait "% have this" stats. Not shipped publicly before launch
+// (spoiler), so a missing file just hides those percentages.
+let statsPromise: Promise<Map<string, CollectionItem> | null> | null = null
+function loadStats() {
+  if (!statsPromise) {
+    statsPromise = fetch('/mint/collection.json')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((items: CollectionItem[] | null) => (items ? new Map(items.map((i) => [i.id, i])) : null))
+      .catch(() => null)
   }
-  return `${a}…${b}`
+  return statsPromise
 }
 
-const nowClock = () => new Date().toTimeString().slice(0, 8)
+// Builds the reveal card from the duck's own on-chain metadata (Arweave).
+async function toMintedDuck(asset: SubmitResult['assets'][number]): Promise<MintedDuck> {
+  const n = Number(asset.name.split('#')[1])
+  const id = Number.isFinite(n) ? `#${pad(n)}` : '#????'
+  const [meta, stats] = await Promise.all([
+    asset.uri ? fetch(asset.uri).then((r) => r.json()).catch(() => null) : Promise.resolve(null),
+    loadStats(),
+  ])
+  const statItem = stats?.get(id)
+  const rank: number = meta?.rank ?? statItem?.rank ?? 0
+  const tier = rank > 0 ? tierForRank(rank) : 'COMMON'
+  const attributes = ((meta?.attributes ?? statItem?.attributes ?? []) as { trait_type: string; value: string }[]).map((a) => ({
+    trait_type: a.trait_type,
+    value: a.value,
+    pct: statItem?.attributes.find((x) => x.trait_type === a.trait_type)?.pct ?? null,
+  }))
+  return { id, image: meta?.image ?? statItem?.image ?? '/mint/duck_minted.png', frame: tierColor(tier), rarity: tier, rank, attributes }
+}
+
+const isWalletRejection = (e: unknown) => /reject|cancel|denied|declined|closed/i.test(e instanceof Error ? e.message : String(e))
 
 /**
- * Drives the whole mint page's interactive state.
- *
- * Wallet connect/disconnect is REAL (via useActiveWallet / Privy) — clicking
- * the floor pass opens a real wallet login, and `gate` tracks that real flow.
- *
- * Everything else (minted count ticking up, the activity tape, the mint
- * transaction itself, and what you "pull") is SIMULATED, matching the
- * design prototype's mock timers 1:1. None of it is wired to a real Candy
- * Machine yet — that's the next build step once one exists on devnet.
+ * Drives the mint page. Everything shown and done here is real: supply,
+ * prices, the OTC Desk discount and balances come from the nasducks-mint
+ * function (which reads the Candy Machines on-chain), and minting builds,
+ * signs, submits and confirms real transactions.
  */
 export function useMintFlow() {
   const wallet = useActiveWallet()
   const market = useMarket()
-
-  // $5 worth of $NASDUCK at the current live price. `market.live` is false
-  // until the first real price tick lands (see MarketProvider) — while
-  // that's true we're still on its hardcoded fallback price, so the token
-  // amount shown is a rough placeholder, not the real live figure yet.
-  const nasduckPerMint = market.price > 0 ? USD_PRICE_PER_MINT / market.price : 0
+  const walletAddr = wallet.publicKey?.toBase58()
 
   const [gate, setGate] = useState<GateState>('idle')
   const [stage, setStage] = useState<MintStage>('idle')
   const [qty, setQty] = useState(1)
-  const [minted, setMinted] = useState(MINT_START)
-  const [tape, setTape] = useState<TapeRow[]>([])
+  const [stats, setStats] = useState<MintStats | null>(null)
+  const [walletInfo, setWalletInfo] = useState<MintStatus['wallet'] | null>(null)
   const [receipt, setReceipt] = useState<Receipt | null>(null)
   const [panel, setPanel] = useState<PanelKey>(null)
   const [mine, setMine] = useState<MintedDuck[]>([])
   const [sel, setSel] = useState(0)
+  const [mintError, setMintError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<string | null>(null)
 
   const gateTimeout = useRef<number | undefined>(undefined)
   const grantedTimeout = useRef<number | undefined>(undefined)
   const idleTimeout = useRef<number | undefined>(undefined)
-  const mintTimeout1 = useRef<number | undefined>(undefined)
-  const mintTimeout2 = useRef<number | undefined>(undefined)
+  const authRef = useRef<{ wallet: string; auth: WalletAuth; at: number } | null>(null)
 
-  // Real 4,444-item collection, preloaded so it's ready by the time a mint
-  // actually happens (connecting a wallet + the scan animation already takes
-  // a few seconds, plenty of time for this small fetch to land).
-  const collectionRef = useRef<CollectionItem[] | null>(null)
-  const drawIndexRef = useRef(0)
-  useEffect(() => {
-    loadShuffledCollection().then((items) => {
-      collectionRef.current = items
+  const lastStatsAt = useRef(0)
+  const lastWalletAt = useRef(0)
+
+  // ------------------------------------------------------------ live status
+  const applyStats = useCallback((next: MintStats) => {
+    // refreshedAt is server time, so ordering is safe whatever the local clock says.
+    setStats((prev) => {
+      if (prev && next.refreshedAt < prev.refreshedAt) return prev
+      if (!prev || next.refreshedAt > prev.refreshedAt) lastStatsAt.current = Date.now()
+      return next
     })
   }, [])
 
-  // Seed the activity tape with plausible-looking recent history on mount —
-  // cosmetic only, matches the prototype's seeded mock tape.
+  const applyStatus = useCallback(
+    (s: MintStatus) => {
+      const { wallet: w, refreshedAt, ...rest } = s
+      applyStats({ ...rest, refreshedAt: Date.parse(refreshedAt) })
+      if (w) {
+        setWalletInfo(w)
+        lastWalletAt.current = Date.now()
+      }
+    },
+    [applyStats],
+  )
+
   useEffect(() => {
-    const seed: TapeRow[] = []
-    let t = Date.now()
-    for (let i = 0; i < 8; i++) {
-      t -= 9000 + Math.random() * 20000
-      seed.push({
-        time: new Date(t).toTimeString().slice(0, 8),
-        wallet: randWallet(),
-        qty: 1 + Math.floor(Math.random() * 4),
-        id: `#${pad(1 + Math.floor(Math.random() * SUPPLY))}`,
-        mine: false,
-      })
+    let cancelled = false
+    const check = async () => {
+      if (cancelled || document.hidden || Date.now() - lastStatsAt.current < STATS_STALE_MS) return
+      // Cheap first: the shared snapshot may have moved without a push reaching us.
+      const cached = await readStats()
+      if (cancelled) return
+      if (cached) applyStats(cached)
+      if (Date.now() - lastStatsAt.current < STATS_STALE_MS) return
+      // Still stale: ask the backend, which refreshes it for everyone.
+      try {
+        const fresh = await fetchStatus()
+        if (!cancelled) applyStatus(fresh)
+      } catch {
+        // Keep showing the last known numbers; the next check retries.
+      }
     }
-    setTape(seed)
-  }, [])
+    readStats().then((s) => {
+      if (cancelled) return
+      if (s) applyStats(s)
+      // A snapshot older than the stale window counts as stale on first load.
+      if (s && Date.now() - s.refreshedAt > STATS_STALE_MS) lastStatsAt.current = 0
+      check()
+    })
+    const unsubscribe = subscribeStats(applyStats, () => {})
+    // Jittered so a crowd that loaded together doesn't check in lockstep.
+    const iv = window.setInterval(check, STATS_CHECK_MS + Math.floor(Math.random() * 5000))
+    return () => {
+      cancelled = true
+      unsubscribe()
+      window.clearInterval(iv)
+    }
+  }, [applyStats, applyStatus])
 
-  // Random mint "ticker" — simulates other people minting, same cadence as
-  // the prototype (tick every second, ~65% chance of a mint that second).
+  const refreshWallet = useCallback(
+    async (force = false) => {
+      if (!walletAddr || (!force && Date.now() - lastWalletAt.current < WALLET_REFRESH_MIN_MS)) return
+      lastWalletAt.current = Date.now()
+      try {
+        applyStatus(await fetchStatus(walletAddr))
+      } catch {
+        // Balances stay as last shown; refetched on next focus or mint.
+      }
+    },
+    [walletAddr, applyStatus],
+  )
+
   useEffect(() => {
-    const iv = window.setInterval(() => {
-      if (Math.random() > 0.35) return
-      setMinted((cur) => {
-        if (cur >= SUPPLY) return cur
-        const q = Math.min(SUPPLY - cur, 1 + Math.floor(Math.random() * 4))
-        const row: TapeRow = { time: nowClock(), wallet: randWallet(), qty: q, id: `#${pad(cur + 1)}`, mine: false }
-        setTape((t) => [row, ...t].slice(0, 8))
-        return cur + q
-      })
-    }, 1000)
-    return () => window.clearInterval(iv)
-  }, [])
+    setWalletInfo(null)
+    if (!walletAddr) return
+    refreshWallet(true)
+    const onVisible = () => {
+      if (!document.hidden) refreshWallet()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [walletAddr, refreshWallet])
 
+  const status: (MintStats & { wallet?: MintStatus['wallet'] }) | null = stats ? { ...stats, wallet: walletInfo ?? undefined } : null
+
+  // ------------------------------------------------------ floor pass badge
   // How long the badge keeps visibly "scanning" after Privy's popup closes
-  // and the wallet actually connects, before flipping to "granted". Privy's
-  // modal closes itself the instant login succeeds — without this, a fast
-  // connection (or an already-authorized cached session) would cut straight
-  // from popup-closes to granted with no scan visible at all. This is
-  // measured from the moment `wallet.connected` actually flips true, not
-  // from when the user clicked, so a slow connection (picking a wallet,
-  // approving in the extension) doesn't eat into this window.
+  // and the wallet actually connects, before flipping to "granted" — measured
+  // from when `wallet.connected` flips true, so a slow connection doesn't eat
+  // into it.
   const SCAN_AFTER_CONNECT_MS = 1000
 
-  // Drives the floor-pass "reading… granted…" animation off the REAL wallet
-  // connection, not a fake timer. Clicking opens Privy's real login; once
-  // `wallet.connected` actually flips true we keep scanning briefly, then
-  // show "granted" and settle. onError (closing the modal, rejecting a
-  // wallet connection, etc.) flips to "failed" immediately instead of
-  // sitting on "reading…" until the 45s fallback timeout below.
   const badgeIn = useCallback(() => {
     if ((gate !== 'idle' && gate !== 'failed') || wallet.connected) return
     setGate('reading')
@@ -171,8 +220,7 @@ export function useMintFlow() {
       window.clearTimeout(gateTimeout.current)
       setGate((g) => (g === 'reading' ? 'failed' : g))
     })
-    // Safety net: if nothing happens for a while (no onError fired, no
-    // connection landed), don't leave the reader stuck on "reading" forever.
+    // Safety net: never leave the reader stuck on "reading".
     gateTimeout.current = window.setTimeout(() => setGate((g) => (g === 'reading' ? 'failed' : g)), 45000)
   }, [gate, wallet])
 
@@ -189,92 +237,235 @@ export function useMintFlow() {
     }
   }, [gate, wallet.connected])
 
-  useEffect(() => () => {
-    window.clearTimeout(gateTimeout.current)
-    window.clearTimeout(grantedTimeout.current)
-    window.clearTimeout(idleTimeout.current)
-    window.clearTimeout(mintTimeout1.current)
-    window.clearTimeout(mintTimeout2.current)
-  }, [])
+  useEffect(
+    () => () => {
+      window.clearTimeout(gateTimeout.current)
+      window.clearTimeout(grantedTimeout.current)
+      window.clearTimeout(idleTimeout.current)
+    },
+    [],
+  )
 
   const logout = useCallback(() => {
     wallet.logout()
     setGate('idle')
     setStage('idle')
-    // Disconnecting clears the "Your Ducks" view back to the unrevealed
-    // placeholder — without a connected wallet we have no business still
-    // showing "you own these" in the UI.
+    setMintError(null)
+    // Disconnecting clears "Your Ducks" — no connected wallet, no "you own these".
     setMine([])
     setSel(0)
+    authRef.current = null
   }, [wallet])
 
-  // SIMULATED mint — matches the prototype's signing(1.2s) -> settling(1.3s)
-  // -> reveal timing exactly. TODO: replace with a real Candy Machine mint
-  // instruction (build tx -> wallet.signTransaction -> send -> confirm) once
-  // one is deployed to devnet.
-  const onMint = useCallback(() => {
-    if (!wallet.connected) {
+  // ---------------------------------------------------------------- pricing
+  const decimals = status?.prices.decimals ?? 6
+  const unit = 10 ** decimals
+  const publicBase = status?.prices.public ? BigInt(status.prices.public) : 0n
+  const otcBase = status?.prices.otc ? BigInt(status.prices.otc) : 0n
+  const publicPriceTokens = Number(publicBase) / unit
+  const otcPriceTokens = Number(otcBase) / unit
+  const usd = (tokens: number) => (market.live && market.price > 0 ? tokens * market.price : null)
+
+  const otcAvailable = status?.otcOpen ? Math.min(status.wallet?.desksAvailable ?? 0, status.otcRemaining) : 0
+  const publicRemaining = status?.publicRemaining ?? 0
+  const maxQty = publicRemaining + otcAvailable
+
+  // The cheaper OTC slots are always used first.
+  const otcQty = Math.min(qty, otcAvailable)
+  const publicQty = Math.min(qty - otcQty, publicRemaining)
+  const totalTokens = otcQty * otcPriceTokens + publicQty * publicPriceTokens
+  const needBase = BigInt(otcQty) * otcBase + BigInt(publicQty) * publicBase
+  const balanceBase = status?.wallet ? BigInt(status.wallet.tokenBalance) : null
+  const lamports = status?.wallet?.lamports ?? null
+
+  let blockedReason: string | null = null
+  if (!status) blockedReason = 'LOADING MARKET…'
+  else if (maxQty === 0) blockedReason = 'SOLD OUT'
+  else if (qty > maxQty) blockedReason = `ONLY ${fmt(maxQty)} LEFT`
+  else if (balanceBase !== null && balanceBase < needBase) blockedReason = 'NOT ENOUGH $NASDUCK'
+  else if (lamports !== null && lamports < qty * LAMPORTS_PER_DUCK_ESTIMATE) blockedReason = 'NOT ENOUGH SOL FOR FEES'
+
+  // ------------------------------------------------------------------- mint
+  const onMint = useCallback(async () => {
+    if (!wallet.connected || !walletAddr) {
       badgeIn()
       return
     }
-    if (stage !== 'idle') return
-    setStage('signing')
-    mintTimeout1.current = window.setTimeout(() => {
-      setStage('settling')
-      mintTimeout2.current = window.setTimeout(() => {
-        setMinted((cur) => {
-          const q = Math.min(qty, SUPPLY - cur)
-          const pool = collectionRef.current
-          const items: MintedDuck[] = Array.from({ length: q }, (_, i) => {
-            if (!pool) {
-              // Fallback for the rare case the fetch hasn't resolved yet —
-              // shouldn't normally happen given the wallet-connect delay.
-              return { id: `#${pad(cur + 1 + i)}`, image: '/mint/duck_minted.png', frame: '#C9D3E3', rarity: 'COMMON', rank: 0, attributes: [] }
-            }
-            const picked = pool[(drawIndexRef.current + i) % pool.length]
-            return { id: picked.id, image: picked.image, frame: tierColor(picked.tier), rarity: picked.tier, rank: picked.rank, attributes: picked.attributes }
-          })
-          if (pool) drawIndexRef.current += q
-          const row: TapeRow = {
-            time: nowClock(),
-            wallet: `YOU · ${wallet.publicKey ? `${wallet.publicKey.toBase58().slice(0, 4)}…${wallet.publicKey.toBase58().slice(-4)}` : '····'}`,
-            qty: q,
-            id: items[0]?.id ?? '',
-            mine: true,
-          }
-          setTape((t) => [row, ...t].slice(0, 8))
-          setMine((m) => [...items.slice().reverse(), ...m])
-          setSel(0)
-          setReceipt({ items, qty: q, total: Math.round(q * nasduckPerMint) })
-          return cur + q
-        })
-        setStage('idle')
-      }, 1300)
-    }, 1200)
-  }, [wallet, stage, qty, nasduckPerMint, badgeIn])
+    if (stage !== 'idle' || !MINT_LIVE || !wallet.signTransactions || !wallet.signMessage) return
+    setMintError(null)
 
-  // No per-wallet cap on the public mint — a wallet can take as much of the
-  // remaining supply as it wants, so the only ceiling here is what's left.
+    let otcReserved = false
+    let latest: MintStatus
+    try {
+      latest = await fetchStatus(walletAddr)
+      applyStatus(latest)
+    } catch (e) {
+      setMintError(e instanceof Error ? e.message : 'Could not load the latest mint status')
+      return
+    }
+
+    const otcAvail = latest.otcOpen ? Math.min(latest.wallet?.desksAvailable ?? 0, latest.otcRemaining) : 0
+    const wantOtc = Math.min(qty, otcAvail)
+    const wantPublic = qty - wantOtc
+    if (wantPublic > latest.publicRemaining) {
+      setMintError(`Only ${fmt(latest.publicRemaining + otcAvail)} available for this wallet right now.`)
+      return
+    }
+    const pubBase = latest.prices.public ? BigInt(latest.prices.public) : 0n
+    const otcB = latest.prices.otc ? BigInt(latest.prices.otc) : 0n
+    const unitL = 10 ** (latest.prices.decimals ?? 6)
+    const need = BigInt(wantOtc) * otcB + BigInt(wantPublic) * pubBase
+    if (latest.wallet && BigInt(latest.wallet.tokenBalance) < need) {
+      setMintError(`Not enough $NASDUCK: this order needs ${fmt(Math.ceil(Number(need) / unitL))}, your wallet has ${fmt(Math.floor(Number(BigInt(latest.wallet.tokenBalance)) / unitL))}.`)
+      return
+    }
+    if (latest.wallet && latest.wallet.lamports < qty * LAMPORTS_PER_DUCK_ESTIMATE) {
+      setMintError(`Not enough SOL for network fees: keep about ${((qty * LAMPORTS_PER_DUCK_ESTIMATE) / 1e9).toFixed(3)} SOL in your wallet for this order.`)
+      return
+    }
+
+    const minted: SubmitResult['assets'] = []
+    let otcCount = 0
+    let publicCount = 0
+    const failures: string[] = []
+
+    try {
+      let auth: WalletAuth | undefined
+      if (wantOtc > 0) {
+        const cached = authRef.current
+        if (cached && cached.wallet === walletAddr && Date.now() - cached.at < AUTH_REUSE_MS) {
+          auth = cached.auth
+        } else {
+          setStage('authorizing')
+          const issuedAt = new Date().toISOString()
+          const signature = await wallet.signMessage(new TextEncoder().encode(authMessage(walletAddr, issuedAt)))
+          auth = { issuedAt, signature: toBase58(signature) }
+          authRef.current = { wallet: walletAddr, auth, at: Date.now() }
+        }
+      }
+
+      let otcLeft = wantOtc
+      let pubLeft = wantPublic
+      const batches = Math.max(Math.ceil(otcLeft / MAX_PER_TIER_PER_BATCH), Math.ceil(pubLeft / MAX_PER_TIER_PER_BATCH))
+      for (let b = 1; otcLeft + pubLeft > 0; b++) {
+        if (batches > 1) setProgress(`BATCH ${b} OF ${batches}`)
+        const o = Math.min(otcLeft, MAX_PER_TIER_PER_BATCH)
+        const p = Math.min(pubLeft, MAX_PER_TIER_PER_BATCH)
+        setStage('signing')
+        const prep = await prepareMint(walletAddr, o, p, o > 0 ? auth : undefined)
+        otcReserved = prep.transactions.some((t) => t.kind === 'otc')
+        const signed = await wallet.signTransactions(
+          prep.transactions.map((t) => fromBase64(t.transaction)),
+          latest.cluster,
+        )
+        setStage('settling')
+        const { results } = await submitMint(signed.map(toBase64))
+        otcReserved = false
+        results.forEach((r, i) => {
+          if (r.status === 'confirmed') {
+            minted.push(...r.assets)
+            if (prep.transactions[i].kind === 'otc') otcCount += r.assets.length
+            else publicCount += r.assets.length
+          } else {
+            failures.push(r.reason ?? 'transaction failed')
+          }
+        })
+        const preparedOtc = prep.transactions.filter((t) => t.kind === 'otc').reduce((a, t) => a + t.assets.length, 0)
+        const preparedPub = prep.transactions.filter((t) => t.kind === 'public').reduce((a, t) => a + t.assets.length, 0)
+        otcLeft -= o
+        pubLeft -= p
+        // Stop on any failure, or if the backend couldn't fill this batch
+        // (desks or supply ran out) — never silently switch tiers or prices.
+        if (!failures.length && (preparedOtc < o || preparedPub < p)) failures.push('fewer ducks were available than requested.')
+        if (failures.length) break
+      }
+    } catch (e) {
+      if (isWalletRejection(e)) {
+        failures.push(
+          otcReserved
+            ? 'Cancelled in your wallet, nothing was charged. Your OTC Desk discount unlocks again in about 3 minutes.'
+            : 'Cancelled in your wallet, nothing was charged.',
+        )
+      } else {
+        failures.push(e instanceof Error ? e.message : 'Something went wrong, nothing further was charged')
+      }
+    }
+
+    if (minted.length) {
+      const ducks = await Promise.all(minted.map(toMintedDuck))
+      setMine((m) => [...ducks.slice().reverse(), ...m])
+      setSel(0)
+      setReceipt({
+        items: ducks,
+        qty: ducks.length,
+        total: Math.round(otcCount * (Number(otcB) / unitL) + publicCount * (Number(pubBase) / unitL)),
+        otcCount,
+        otcEach: Number(otcB) / unitL,
+        publicCount,
+        publicEach: Number(pubBase) / unitL,
+      })
+    }
+    if (failures.length) {
+      const first = failures[0]
+      setMintError(minted.length ? `Minted ${minted.length} of ${qty}. ${first}` : first.charAt(0).toUpperCase() + first.slice(1))
+    }
+    setStage('idle')
+    setProgress(null)
+    refreshWallet(true)
+  }, [wallet, walletAddr, stage, qty, badgeIn, applyStatus, refreshWallet])
+
+  // --------------------------------------------------------------- quantity
+  const ceiling = Math.max(1, maxQty)
   const dec = useCallback(() => setQty((q) => Math.max(1, q - 1)), [])
-  const inc = useCallback(() => setQty((q) => Math.min(SUPPLY - minted, q + 1)), [minted])
-  const setMaxQty = useCallback(() => setQty(Math.max(1, SUPPLY - minted)), [minted])
+  const inc = useCallback(() => setQty((q) => Math.min(ceiling, q + 1)), [ceiling])
+  const setMaxQty = useCallback(() => setQty(ceiling), [ceiling])
+  // Lets the qty box be typed into directly; clamps to [1, what's available].
+  const setQtyCustom = useCallback(
+    (raw: number) => {
+      if (!Number.isFinite(raw)) return
+      setQty(Math.min(Math.max(1, Math.floor(raw)), ceiling))
+    },
+    [ceiling],
+  )
   const closeReceipt = useCallback(() => setReceipt(null), [])
   const togglePanel = useCallback((key: PanelKey) => setPanel((p) => (p === key ? null : key)), [])
 
+  const supply = status?.supply ?? SUPPLY
+  const mintedCount = status?.minted ?? 0
+  const fmtTokens = (n: number) => fmt(Math.round(n))
+
   return {
     wallet,
+    cluster: status?.cluster ?? null,
     usdPricePerMint: USD_PRICE_PER_MINT,
-    nasduckPerMint,
     nasduckPriceUsd: market.price,
-    priceLive: market.live,
     gate,
     stage,
     qty,
-    minted,
-    mintedStr: fmt(minted),
-    remainingStr: fmt(SUPPLY - minted),
-    mintedPct: ((minted / SUPPLY) * 100).toFixed(1) + '%',
-    tape,
+    supply,
+    supplyStr: fmt(supply),
+    minted: mintedCount,
+    mintedStr: fmt(mintedCount),
+    remainingStr: fmt(Math.max(0, supply - mintedCount)),
+    mintedPct: ((mintedCount / Math.max(1, supply)) * 100).toFixed(1) + '%',
+    publicPriceTokens,
+    publicPriceUsd: usd(publicPriceTokens),
+    otcOpen: status?.otcOpen ?? false,
+    otcAvailable,
+    desksHeld: status?.wallet?.desksHeld ?? 0,
+    otcPriceTokens,
+    otcPriceUsd: usd(otcPriceTokens),
+    otcQty,
+    publicQty,
+    totalTokens,
+    totalTokensStr: fmtTokens(totalTokens),
+    totalUsd: usd(totalTokens),
+    balanceLabel: status?.wallet
+      ? `${(status.wallet.lamports / 1e9).toFixed(3)} SOL · ${fmtTokens(Number(BigInt(status.wallet.tokenBalance)) / unit)} $NASDUCK`
+      : '— SOL · — $NASDUCK',
+    blockedReason,
+    mintError,
+    progress,
     receipt,
     panel,
     mine,
@@ -286,6 +477,7 @@ export function useMintFlow() {
     dec,
     inc,
     setMaxQty,
+    setQtyCustom,
     closeReceipt,
     togglePanel,
   }

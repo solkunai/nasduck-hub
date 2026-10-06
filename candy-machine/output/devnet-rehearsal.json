@@ -1,0 +1,31 @@
+{
+  "cluster": "devnet",
+  "collection": "AYVBaPxWsCJ3Q6CN2gmevjiR2trkY3a2yrc1dqqnZNkW",
+  "otcSigner": "EEnZXdz5Cftht54XyzLshQMLDcJo23GzFKCMGsvn6jfm",
+  "otcMachine": "Bn13XKNrPrGgTuAj15VKpoc8cciFAbB52tRNEoLHxHge",
+  "publicMachine": "3CDTUamLhfnuzBARkHU62Li8j3dfErDKVTs8vCd9Zqwr",
+  "otcItems": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "publicItems": [
+    10,
+    11,
+    12,
+    13,
+    14,
+    5550,
+    5551,
+    5552,
+    5553,
+    5554
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "cluster": "devnet",
+  "otcDeskCollection": "CZMg7VhHQngEJZDEyaJPKc8iVcPTQqmLbddVKaDxRiSR",
+  "testNasduckMint": "CExJRpPLM7E73cAYQC2hLTZuJkHNq7vbHZkM3BMz3trN",
+  "wallets": {
+    "holderA": "DLB1YS4jsyHTeai5PQLZwGv5hfKiWgaGMAZwqeXoLgeN",
+    "holderB": "DmxXQ3smcxPVhcmPnZdSctP18bYHhQQjeBsxJwTYEYHu",
+    "nonHolder": "CfqgdHrjPLNBgy1zdtLPqFD9DfGZRz8mLmTAUiWjtdsZ",
+    "treasury": "FccdFrcLtLUyshMFSWLMcMM33YZS3dpyLMyBEXaCHymZ"
+  },
+  "tokenAccounts": {
+    "holderA": "7aYKmABTUAWeztStdz37HVZHH5VPPKkdeyP5inTbcMzU",
+    "holderB": "GkxsiAvBEjbwPvAAiedbZnf3sXU23jenw1Uf1hnfzVrf",
+    "nonHolder": "7dEu5NunBGGrEL24jR1maT4FkST3YFYb2aNYWHbSrTxY",
+    "treasury": "5ALDTiKbaqKhyBCx6EPEM2cs4sVBC6yP2sRtiWLvwN5B"
+  },
+  "desks": {
+    "holderA": [
+      "458MekRDfsStTjoNYjaSyyx1fk4hEtTAR8e768oSyheN",
+      "3PfwtFJmwxuCaBH6Z9HW82njiL3y49g1yC2KyEmSXM9H",
+      "BJjRj7j7pDNsqzEQGw37nfAE6SHkbxKrTJFdwLMZLwZ8"
+    ],
+    "holderB": [
+      "2LHqCojGnTEm62jC4dCbraQKm46eugFLKs7ucASShBZQ"
+    ]
+  }
+}

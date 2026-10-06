@@ -32,6 +32,7 @@ export function Mint() {
       <div className="relative z-10">
         <MintTicker
           mintedStr={m.mintedStr}
+          supplyStr={m.supplyStr}
           remainingStr={m.remainingStr}
           usdPricePerMint={m.usdPricePerMint}
           nasduckPriceUsd={m.nasduckPriceUsd}
@@ -70,6 +71,11 @@ export function Mint() {
         </div>
 
         <div className="mx-auto flex flex-col items-center gap-4 px-3 pb-6 min-[700px]:px-5 min-[700px]:pb-8" style={{ maxWidth: 1180 }}>
+          {m.cluster === 'devnet' && (
+            <div className="w-full border-2 border-[#FF5A4E] bg-[#02060E] px-3 py-1.5 text-center font-terminal text-[18px] text-[#FF5A4E]">
+              DEVNET TEST MODE · test tokens only, nothing here is real
+            </div>
+          )}
           <div className="inline-flex items-center gap-2 border-2 border-[#1F6B3A] bg-[#02060E] px-3 py-1.5 font-terminal text-[20px] text-[#6FBE44] [text-shadow:0_0_6px_currentColor]">
             MARKET OPEN · PUBLIC MINT
           </div>
@@ -87,7 +93,7 @@ export function Mint() {
 
           <div className="w-full border-[3px] border-[#1F6B3A] bg-[#02060E] p-3.5">
             <div className="mb-2 flex items-center justify-between font-terminal text-[18px]">
-              <span className="text-[#C9D3E3]">{m.mintedStr} / 4,444 MINTED</span>
+              <span className="text-[#C9D3E3]">{m.mintedStr} / {m.supplyStr} MINTED</span>
               <span className="text-[#6FBE44]">{m.mintedPct}</span>
             </div>
             <div className="h-[18px] w-full bg-[#0B1220]">
@@ -113,24 +119,9 @@ export function Mint() {
               }}
             >
               {!connected ? (
-                <FloorPass gate={m.gate} connected={connected} onSwipe={m.badgeIn} mintedStr={m.mintedStr} remainingStr={m.remainingStr} />
+                <FloorPass gate={m.gate} connected={connected} onSwipe={m.badgeIn} mintedStr={m.mintedStr} supplyStr={m.supplyStr} remainingStr={m.remainingStr} />
               ) : (
-                <TradingFloor
-                  walletShort={walletShort}
-                  stage={m.stage}
-                  minted={m.minted}
-                  mintedStr={m.mintedStr}
-                  mintedPct={m.mintedPct}
-                  usdPricePerMint={m.usdPricePerMint}
-                  nasduckPerMint={m.nasduckPerMint}
-                  priceLive={m.priceLive}
-                  qty={m.qty}
-                  dec={m.dec}
-                  inc={m.inc}
-                  setMaxQty={m.setMaxQty}
-                  onMint={m.onMint}
-                  onLogout={m.logout}
-                />
+                <TradingFloor walletShort={walletShort} m={m} />
               )}
             </div>
           </div>
@@ -166,7 +157,7 @@ export function Mint() {
             </button>
           </div>
 
-          <div className="font-terminal text-[20px] text-[#F7E7C1]">Collectibles, not financial advice. The advisor is a duck.</div>
+          <div className="whitespace-nowrap text-center font-terminal text-[11px] text-[#F7E7C1] min-[700px]:text-[20px]">Collectibles, not financial advice. The advisor is a duck.</div>
         </div>
       </div>
 

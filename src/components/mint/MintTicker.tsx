@@ -2,15 +2,16 @@ import { formatPrice } from '../../lib/format'
 
 interface MintTickerProps {
   mintedStr: string
+  supplyStr: string
   remainingStr: string
   usdPricePerMint: number
   nasduckPriceUsd: number
 }
 
-function TickerContent({ mintedStr, remainingStr, usdPricePerMint, nasduckPriceUsd }: MintTickerProps) {
+function TickerContent({ mintedStr, supplyStr, remainingStr, usdPricePerMint, nasduckPriceUsd }: MintTickerProps) {
   return (
     <div className="flex items-center gap-[34px] whitespace-nowrap px-6 py-[9px] font-terminal text-[22px] [text-shadow:0_0_6px_currentColor]">
-      <span className="text-[#6FBE44]">▲ NDUCK {mintedStr}/4,444</span>
+      <span className="text-[#6FBE44]">▲ NDUCK {mintedStr}/{supplyStr}</span>
       <span className="text-[#F5911E]">PUBLIC MINT · ${usdPricePerMint.toFixed(2)}/DUCK</span>
       <span className="text-[#6FBE44]">▲ $NASDUCK {formatPrice(nasduckPriceUsd)}</span>
       <span className="text-[#6FBE44]">▲ QQQ +2.34%</span>

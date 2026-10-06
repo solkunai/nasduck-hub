@@ -25,7 +25,7 @@ export function YourDucksCard({ mine, sel, onSelect }: YourDucksCardProps) {
       }}
     >
       <div className="mb-2.5 flex items-center justify-between">
-        <div className="font-pixelify text-[22px] font-bold text-[#F5911E]">YOUR DUCKS</div>
+        <div className="font-pixelify text-[22px] font-bold text-white">YOUR DUCKS</div>
         <div className="font-terminal text-[20px] text-[#F7E7C1]">{mine.length} HELD</div>
       </div>
 
@@ -88,9 +88,11 @@ export function YourDucksCard({ mine, sel, onSelect }: YourDucksCardProps) {
         </div>
       )}
 
-      <div className="mt-2.5 text-center font-terminal text-[13px] text-[#C9D3E3]/70">
-        Your duck appears here the moment the mint settles.
-      </div>
+      <img
+        src="/mint/one_of_one_banner.png"
+        alt="Find a 1 of 1 duck — 5 true 1-of-1s are hiding in the mint."
+        className="mx-auto mt-2.5 block w-full max-w-[280px] [image-rendering:pixelated]"
+      />
     </div>
   )
 }

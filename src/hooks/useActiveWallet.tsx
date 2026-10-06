@@ -4,15 +4,22 @@ import type { usePrivy as UsePrivy, useLogin as UseLogin } from '@privy-io/react
 import type {
   ConnectedStandardSolanaWallet,
   useExportWallet as UseExportWallet,
+  useSignMessage as UseSignMessage,
   useSignTransaction as UseSignTransaction,
   useWallets as UseWallets,
 } from '@privy-io/react-auth/solana'
+
+export type SolanaCluster = 'mainnet' | 'devnet'
 
 export interface ActiveWallet {
   ready: boolean
   connected: boolean
   publicKey: PublicKey | null
   signTransaction: ((tx: VersionedTransaction) => Promise<VersionedTransaction>) | undefined
+  // Signs several serialized transactions in one wallet request (wallets
+  // that support batch signing show a single approval).
+  signTransactions: ((txs: Uint8Array[], cluster: SolanaCluster) => Promise<Uint8Array[]>) | undefined
+  signMessage: ((message: Uint8Array) => Promise<Uint8Array>) | undefined
   // onError fires when the login modal closes without completing (user hit
   // the X, picked a wallet and rejected the connection, etc.) — lets callers
   // like the mint page's floor-pass badge show a real "failed, try again"
@@ -44,6 +51,8 @@ const DISCONNECTED: ActiveWallet = {
   connected: false,
   publicKey: null,
   signTransaction: undefined,
+  signTransactions: undefined,
+  signMessage: undefined,
   login: () => {
     console.warn('[wallet] still loading — try again in a moment.')
   },
@@ -71,6 +80,7 @@ export function PrivyActiveWalletPublisher({
   useLoginHook,
   useWalletsHook,
   useSignTransactionHook,
+  useSignMessageHook,
   useExportWalletHook,
 }: {
   children: React.ReactNode
@@ -78,11 +88,13 @@ export function PrivyActiveWalletPublisher({
   useLoginHook: typeof UseLogin
   useWalletsHook: typeof UseWallets
   useSignTransactionHook: typeof UseSignTransaction
+  useSignMessageHook: typeof UseSignMessage
   useExportWalletHook: typeof UseExportWallet
 }) {
   const { ready: privyReady, authenticated, logout, user } = usePrivyHook()
   const { ready: walletsReady, wallets } = useWalletsHook()
   const { signTransaction: privySignTransaction } = useSignTransactionHook()
+  const { signMessage: privySignMessage } = useSignMessageHook()
   const { exportWallet: privyExportWallet } = useExportWalletHook()
 
   // useLogin's onError is fixed at hook-setup time, not per-call — this ref
@@ -143,6 +155,28 @@ export function PrivyActiveWalletPublisher({
     [wallet, privySignTransaction],
   )
 
+  const signTransactions = useCallback(
+    async (txs: Uint8Array[], cluster: SolanaCluster): Promise<Uint8Array[]> => {
+      if (!wallet) throw new Error('no wallet connected')
+      if (txs.length === 0) return []
+      const chain = cluster === 'devnet' ? ('solana:devnet' as const) : ('solana:mainnet' as const)
+      const inputs = txs.map((transaction) => ({ transaction, wallet, chain }))
+      // Privy returns a single result for one input and a list for several.
+      const out = inputs.length === 1 ? [await privySignTransaction(inputs[0])] : await privySignTransaction(...inputs)
+      return out.map((o) => o.signedTransaction)
+    },
+    [wallet, privySignTransaction],
+  )
+
+  const signMessage = useCallback(
+    async (message: Uint8Array): Promise<Uint8Array> => {
+      if (!wallet) throw new Error('no wallet connected')
+      const { signature } = await privySignMessage({ message, wallet })
+      return signature
+    },
+    [wallet, privySignMessage],
+  )
+
   // Only the embedded wallet has a private key Privy can export — an
   // external wallet (Phantom etc.) keeps its own key in its own extension,
   // Privy never sees it.
@@ -156,6 +190,8 @@ export function PrivyActiveWalletPublisher({
     connected,
     publicKey,
     signTransaction: connected ? signTransaction : undefined,
+    signTransactions: connected ? signTransactions : undefined,
+    signMessage: connected ? signMessage : undefined,
     login,
     logout,
     isEmbedded,

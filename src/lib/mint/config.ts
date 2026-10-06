@@ -1,27 +1,22 @@
-// Mint page config — public mint only, no allowlist/phases (flat price +
-// flat per-wallet limit for everyone). Once a real Candy Machine exists,
-// replace MINT_START (the mock "already minted" baseline) with live
-// `itemsRedeemed` read from it.
-// Kill switch for sharing the page as a preview (e.g. with the NasDuck team)
-// before the real mint is ready. When false, the buy button is disabled and
-// just reads "MINT OPENS SOON" — wallet connect and everything else on the
-// page still works normally. Flip to true once the real Candy Machine is
-// live and wired up.
-export const MINT_LIVE = false
+// Kill switch: the buy button stays disabled ("MINT OPENS SOON") unless the
+// build sets VITE_MINT_LIVE=true. Lets the page be shared as a preview, and
+// lets a local .env turn minting on for devnet testing without it going
+// live in production.
+export const MINT_LIVE = import.meta.env.VITE_MINT_LIVE === 'true'
 
-export const SUPPLY = 4444
+// Fallback until the live status from the chain arrives.
+export const SUPPLY = 5555
 
-// $5 USD per duck, paid in $NASDUCK. Actual token amount is computed live
-// from useMarket().price, not stored here — see useMintFlow.
+// Advertised price in USD. What's actually charged is the fixed $NASDUCK
+// amount set on each Candy Machine's payment guard (read live via the
+// nasducks-mint function); the USD shown at checkout is that amount at the
+// current market price.
 export const USD_PRICE_PER_MINT = 5
-
-/** Mock baseline for "already minted" on page load — placeholder only. */
-export const MINT_START = 0
 
 // Shared between the desktop full-width strip (Mint.tsx) and the mobile
 // bottom sheet (FloorPass.tsx) — same four facts, different container.
 export const MINT_DETAILS = [
-  ['SUPPLY', '4,444 total. No ducks held back — every one is mintable.'],
+  ['SUPPLY', '5,555 total. No ducks held back — every one is mintable.'],
   ['MINT FUNDS', '50% LP, 25% community (airdrops, giveaways), 25% marketing/dev/artist.'],
   ['ROYALTIES', '5% on secondary, routed to the $NASDUCK community wallet.'],
   ['REVEAL', 'Instant. You see your duck the moment the transaction settles.'],
@@ -32,6 +27,7 @@ export const MINT_DETAILS = [
 // the Fine Print modal doesn't just repeat the strip already visible below
 // the cards on desktop.
 export const FINE_PRINT_ITEMS = [
+  ['NON-CUSTODIAL', 'You sign every transaction in your own wallet. We never hold your funds or your ducks and have no way to move them.'],
   ['OWNERSHIP', 'You own the art. We keep zero rights to resell or license your specific duck.'],
   ['NO PROMISES', 'NFT value can go to zero. This is a collectible, not an investment contract.'],
   ['IRREVERSIBLE', "Blockchain transactions can't be undone. Double-check your wallet and the price before confirming."],
@@ -39,19 +35,27 @@ export const FINE_PRINT_ITEMS = [
   ['ELIGIBILITY', 'You must be legally able to hold crypto assets in your jurisdiction to mint.'],
 ] as const
 
-// Real tier breakdown, computed from the actual generated 4,444-item
-// collection (public/mint/collection.json) — bucketed by each NFT's
-// nftexport-computed rank: top 100 = Legendary (includes all 5 1-of-1s),
-// next 400 = Rare, next 1,200 = Uncommon, remaining 2,744 = Common.
+// Real tier breakdown of the 5,555-item collection, bucketed by each NFT's
+// rank: top 125 = Legendary (includes all 5 1-of-1s), next 500 = Rare,
+// next 1,500 = Uncommon, remaining 3,430 = Common. Must match the `tier`
+// values baked into public/mint/collection.json.
 export const REAL_RARITY = [
-  { tier: 'COMMON', count: 2744, pct: '62%', color: '#C9D3E3' },
-  { tier: 'UNCOMMON', count: 1200, pct: '27%', color: '#F7E7C1' },
-  { tier: 'RARE', count: 400, pct: '9%', color: '#6FBE44' },
-  { tier: 'LEGENDARY', count: 100, pct: '2%', color: '#FFC522' },
+  { tier: 'COMMON', count: 3430, pct: '62%', color: '#C9D3E3' },
+  { tier: 'UNCOMMON', count: 1500, pct: '27%', color: '#F7E7C1' },
+  { tier: 'RARE', count: 500, pct: '9%', color: '#6FBE44' },
+  { tier: 'LEGENDARY', count: 125, pct: '2%', color: '#FFC522' },
 ] as const
 
 export function tierColor(tier: string): string {
   return REAL_RARITY.find((r) => r.tier === tier)?.color ?? '#C9D3E3'
+}
+
+// Same rank cutoffs as REAL_RARITY above.
+export function tierForRank(rank: number): string {
+  if (rank <= 125) return 'LEGENDARY'
+  if (rank <= 625) return 'RARE'
+  if (rank <= 2125) return 'UNCOMMON'
+  return 'COMMON'
 }
 
 // One real NFT's record from public/mint/collection.json.

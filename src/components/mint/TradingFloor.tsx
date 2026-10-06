@@ -1,67 +1,49 @@
 import { useState, type ReactNode } from 'react'
-import type { MintStage } from '../../hooks/useMintFlow'
-import { formatNumber } from '../../lib/format'
+import type { useMintFlow } from '../../hooks/useMintFlow'
 import { MINT_LIVE } from '../../lib/mint/config'
 
 interface TradingFloorProps {
   walletShort: string
-  stage: MintStage
-  minted: number
-  mintedStr: string
-  mintedPct: string
-  usdPricePerMint: number
-  nasduckPerMint: number
-  priceLive: boolean
-  qty: number
-  dec: () => void
-  inc: () => void
-  setMaxQty: () => void
-  onMint: () => void
-  onLogout: () => void
+  m: ReturnType<typeof useMintFlow>
 }
 
-export function TradingFloor({
-  walletShort,
-  stage,
-  minted,
-  mintedStr,
-  mintedPct,
-  usdPricePerMint,
-  nasduckPerMint,
-  priceLive,
-  qty,
-  dec,
-  inc,
-  setMaxQty,
-  onMint,
-  onLogout,
-}: TradingFloorProps) {
+const usdStr = (v: number | null) => (v === null ? '' : `$${v.toFixed(2)}`)
+
+export function TradingFloor({ walletShort, m }: TradingFloorProps) {
   const [confirmingLogout, setConfirmingLogout] = useState(false)
-  const totalTokens = Math.round(qty * nasduckPerMint)
-  const totalUsd = qty * usdPricePerMint
+  const { stage, qty, dec, inc, setMaxQty, setQtyCustom, onMint, logout: onLogout } = m
+  const ready = MINT_LIVE && stage === 'idle' && !m.blockedReason
 
   // Pixelify Sans's "5" glyph renders almost identical to "S" (confirmed by
   // rendering it in isolation — "$5.00" reads as "$S.OO" at this size), so
-  // the price specifically needs VT323 instead — this project's own
+  // the numbers specifically need VT323 instead — this project's own
   // established font for numeric/data display, same reasoning as the ticker
   // and stat boxes elsewhere on this page.
   let ctaLabel: ReactNode = (
     <>
-      BUY {qty} NDUCK · <span className="font-terminal">${totalUsd.toFixed(2)}</span> IN $NASDUCK
+      BUY {qty} NDUCK · <span className="font-terminal">{m.totalTokensStr}</span> $NASDUCK
     </>
   )
   let ctaBg = '#F5911E'
   let ctaFg = '#02060E'
-  if (stage === 'signing') {
-    ctaLabel = 'SIGN IN WALLET…'
+  if (stage === 'authorizing') {
+    ctaLabel = 'VERIFY OTC DESK IN WALLET…'
+    ctaBg = '#0B1220'
+    ctaFg = '#F5911E'
+  } else if (stage === 'signing') {
+    ctaLabel = m.progress ? `SIGN IN WALLET · ${m.progress}` : 'SIGN IN WALLET…'
     ctaBg = '#0B1220'
     ctaFg = '#F5911E'
   } else if (stage === 'settling') {
-    ctaLabel = 'SETTLING ON SOLANA…'
+    ctaLabel = m.progress ? `SETTLING · ${m.progress}` : 'SETTLING ON SOLANA…'
     ctaBg = '#0B1220'
     ctaFg = '#6FBE44'
   } else if (!MINT_LIVE) {
     ctaLabel = 'MINT OPENS SOON'
+    ctaBg = '#0B1220'
+    ctaFg = '#7E97BD'
+  } else if (m.blockedReason) {
+    ctaLabel = m.blockedReason
     ctaBg = '#0B1220'
     ctaFg = '#7E97BD'
   }
@@ -74,7 +56,7 @@ export function TradingFloor({
         <img src="/mint/badge_photo.jpg" alt="" className="h-14 w-14 shrink-0 border-2 border-[#02060E] object-cover object-[50%_25%]" />
         <div className="flex-1 font-terminal text-[15px] leading-tight text-[#3B2F1E]">
           <div>WALLET: {walletShort}</div>
-          <div>BALANCE: — SOL · — $NASDUCK</div>
+          <div>BALANCE: {m.balanceLabel}</div>
           <div className="text-[#2E6B1E]">CLEARED TO MINT</div>
         </div>
         <button
@@ -122,12 +104,12 @@ export function TradingFloor({
 
       <div className="mt-4 border-2 border-[#1F6B3A] bg-[#02060E] p-3">
         <div className="mb-2 flex items-center justify-between font-terminal text-[16px]">
-          <span className="text-[#C9D3E3]">MINTED · {mintedStr} / 4,444 ({mintedPct})</span>
+          <span className="text-white">MINTED · {m.mintedStr} / {m.supplyStr} ({m.mintedPct})</span>
         </div>
         <div className="h-6 w-full bg-[#0B1220]">
           <div
             className="h-full [background:repeating-linear-gradient(90deg,#F5911E_0_8px,transparent_8px_10px)] [filter:drop-shadow(0_0_4px_#F5911E)] transition-[width] duration-500"
-            style={{ width: `${(minted / 4444) * 100}%` }}
+            style={{ width: m.mintedPct }}
           />
         </div>
       </div>
@@ -135,9 +117,9 @@ export function TradingFloor({
       <div className="mt-4 grid grid-cols-3 gap-px bg-[#1B2F52] text-center font-terminal text-[14px]">
         <div className="bg-[#0B1220] p-2.5">
           <div className="text-[#F0E4CC]">PRICE</div>
-          <div className="text-[20px] text-[#F0E4CC]">${usdPricePerMint.toFixed(2)}</div>
+          <div className="text-[20px] text-[#F0E4CC]">{m.publicPriceUsd !== null ? usdStr(m.publicPriceUsd) : '—'}</div>
           <div className="text-[11px] text-[#5E7699]">
-            {priceLive ? `≈ ${formatNumber(Math.round(nasduckPerMint))} $NASDUCK` : 'pricing…'}
+            {m.publicPriceTokens > 0 ? `${m.publicPriceTokens.toLocaleString('en-US')} $NASDUCK` : 'pricing…'}
           </div>
         </div>
         <div className="bg-[#0B1220] p-2.5">
@@ -145,8 +127,17 @@ export function TradingFloor({
           <div className="text-[20px] text-[#6FBE44]">NO LIMIT</div>
         </div>
         <div className="bg-[#0B1220] p-2.5">
-          <div className="text-[#F0E4CC]">ELIGIBLE</div>
-          <div className="text-[20px] text-[#6FBE44]">YES</div>
+          <div className="text-[#F0E4CC]">OTC DESKS</div>
+          {m.otcOpen ? (
+            <>
+              <div className={`text-[20px] ${m.otcAvailable > 0 ? 'text-[#6FBE44]' : 'text-[#F0E4CC]'}`}>{m.otcAvailable}</div>
+              <div className="text-[11px] text-[#5E7699]">
+                {m.otcAvailable > 0 ? `discounted at ${m.otcPriceTokens.toLocaleString('en-US')} each` : m.desksHeld > 0 ? 'discounts used' : 'none held'}
+              </div>
+            </>
+          ) : (
+            <div className="text-[20px] text-[#F0E4CC]">—</div>
+          )}
         </div>
       </div>
 
@@ -154,18 +145,45 @@ export function TradingFloor({
         <button
           type="button"
           onClick={dec}
-          className="h-11 w-11 border-2 border-[#1F6B3A] bg-[#0B1220] font-pixelify text-[22px] text-[#F7E7C1]"
+          className="h-11 w-11 font-pixelify text-[22px] font-bold text-[#F7E7C1]"
+          style={{
+            borderImageSource: 'url(/mint/qty_btn_frame.png)',
+            borderImageSlice: '125 125 125 125',
+            borderImageWidth: '8px',
+            borderImageRepeat: 'stretch',
+            borderStyle: 'solid',
+            borderWidth: '8px',
+          }}
         >
           −
         </button>
         <div className="text-center">
-          <div className="font-terminal text-[48px] leading-none text-[#F5911E]">{qty}</div>
-          <div className="font-terminal text-[13px] text-[#7E97BD]">SHARES OF DUCK</div>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={qty}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/[^0-9]/g, '')
+              if (digits === '') return
+              setQtyCustom(Number(digits))
+            }}
+            className="w-[110px] bg-transparent text-center font-terminal text-[48px] leading-none text-white outline-none"
+          />
+          <div className="font-terminal text-[13px] text-white">SHARES OF DUCK</div>
         </div>
         <button
           type="button"
           onClick={inc}
-          className="h-11 w-11 border-2 border-[#1F6B3A] bg-[#0B1220] font-pixelify text-[22px] text-[#F7E7C1]"
+          className="h-11 w-11 font-pixelify text-[22px] font-bold text-[#F7E7C1]"
+          style={{
+            borderImageSource: 'url(/mint/qty_btn_frame.png)',
+            borderImageSlice: '125 125 125 125',
+            borderImageWidth: '8px',
+            borderImageRepeat: 'stretch',
+            borderStyle: 'solid',
+            borderWidth: '8px',
+          }}
         >
           +
         </button>
@@ -179,22 +197,38 @@ export function TradingFloor({
       </div>
 
       <div className="mt-4 text-center">
-        <div className="font-terminal text-[13px] text-[#7E97BD]">ORDER TOTAL · ${totalUsd.toFixed(2)}</div>
-        <div className="font-terminal text-[38px] text-[#F0E4CC]">{formatNumber(totalTokens)} $NASDUCK</div>
+        <div className="font-terminal text-[13px] text-white">
+          ORDER TOTAL{m.totalUsd !== null ? ` · ≈ ${usdStr(m.totalUsd)}` : ''}
+        </div>
+        <div className="font-terminal text-[38px] text-[#F0E4CC]">{m.totalTokensStr} $NASDUCK</div>
+        {m.otcQty > 0 && (
+          <div className="font-terminal text-[13px] text-[#6FBE44]">
+            {m.otcQty} AT OTC DESK PRICE{m.publicQty > 0 ? ` · ${m.publicQty} AT FULL PRICE` : ''}
+          </div>
+        )}
       </div>
 
       <button
         type="button"
         onClick={onMint}
-        disabled={stage !== 'idle' || !MINT_LIVE}
+        disabled={!ready}
         className="mt-4 w-full py-4 font-pixelify text-[26px] font-bold"
         style={{ background: ctaBg, color: ctaFg }}
       >
         {ctaLabel}
       </button>
 
+      {m.mintError && (
+        <div role="alert" className="mt-2 border-2 border-[#FF5A4E] bg-[#02060E] p-2 text-center font-terminal text-[15px] text-[#FF5A4E]">
+          {m.mintError}
+        </div>
+      )}
+
       <div className="mt-2 text-center font-terminal text-[13px] text-[#5E7699]">
         Only mint from this page. The duck will never DM you a link.
+      </div>
+      <div className="mt-1 text-center font-terminal text-[13px] text-[#5E7699]">
+        Non-custodial: you approve everything in your own wallet. We never hold your funds or NFTs.
       </div>
     </div>
   )

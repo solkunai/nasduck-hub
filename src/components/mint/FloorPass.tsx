@@ -7,13 +7,14 @@ interface FloorPassProps {
   connected: boolean
   onSwipe: () => void
   mintedStr: string
+  supplyStr: string
   remainingStr: string
 }
 
 // State A of the mint terminal — shown before a wallet is connected. The
 // "floor pass + card reader" ritual is purely cosmetic theming around a real
 // wallet connect click (see useMintFlow.badgeIn).
-export function FloorPass({ gate, connected, onSwipe, mintedStr, remainingStr }: FloorPassProps) {
+export function FloorPass({ gate, connected, onSwipe, mintedStr, supplyStr, remainingStr }: FloorPassProps) {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const reading = gate === 'reading'
   const failed = gate === 'failed'
@@ -39,10 +40,10 @@ export function FloorPass({ gate, connected, onSwipe, mintedStr, remainingStr }:
       <button
         type="button"
         onClick={onSwipe}
-        className="flex w-full flex-col items-center gap-2 border-0 bg-transparent p-0"
+        className="flex w-full flex-col items-center gap-7 border-0 bg-transparent p-0"
       >
         <div
-          className="relative mx-auto aspect-[1691/930] w-full max-w-[655px] overflow-hidden"
+          className="relative mx-auto aspect-[1691/930] w-full max-w-[620px] overflow-hidden"
           style={{ animation: reading ? 'mintSwipe 1.5s ease-in-out' : 'none' }}
         >
           <img src="/mint/badge_template.png" alt="" className="absolute inset-0 h-full w-full object-cover [image-rendering:pixelated]" />
@@ -54,26 +55,29 @@ export function FloorPass({ gate, connected, onSwipe, mintedStr, remainingStr }:
               className="h-full w-full object-cover object-[50%_25%]"
               style={{ filter: photoRevealed ? 'none' : 'brightness(0) opacity(.55)' }}
             />
-            <div className="absolute inset-x-0 bottom-0 bg-[#02060E] text-center font-terminal text-[10px] leading-tight text-[#F7E7C1]">
+            <div
+              className="absolute inset-x-0 bottom-0 bg-[#02060E] text-center font-terminal leading-tight text-[#F7E7C1]"
+              style={{ fontSize: 'clamp(6px, 1.8vw, 10px)' }}
+            >
               {photoRevealed ? 'VERIFIED' : 'NO PHOTO'}
             </div>
           </div>
 
           <div
-            className="absolute flex items-center truncate px-1.5 font-terminal text-[15px] leading-none text-[#02060E]"
-            style={{ left: '36.7%', top: '39.2%', width: '27.8%', height: '6.2%' }}
+            className="absolute flex items-center truncate px-1.5 font-terminal leading-none text-[#02060E]"
+            style={{ left: '36.7%', top: '39.2%', width: '27.8%', height: '6.2%', fontSize: 'clamp(8px, 2.6vw, 15px)' }}
           >
             {granted ? 'YOU' : '???????'}
           </div>
           <div
-            className="absolute flex items-center truncate px-1.5 font-terminal text-[15px] leading-none text-[#02060E]"
-            style={{ left: '36.7%', top: '51.6%', width: '27.8%', height: '6.1%' }}
+            className="absolute flex items-center truncate px-1.5 font-terminal leading-none text-[#02060E]"
+            style={{ left: '36.7%', top: '51.6%', width: '27.8%', height: '6.1%', fontSize: 'clamp(8px, 2.6vw, 15px)' }}
           >
             PUBLIC FLOOR
           </div>
           <div
-            className="absolute flex items-center truncate px-1.5 font-terminal text-[15px] font-bold leading-none"
-            style={{ left: '36.7%', top: '64.2%', width: '27.8%', height: '6.2%', color: clearColor }}
+            className="absolute flex items-center truncate px-1.5 font-terminal font-bold leading-none"
+            style={{ left: '36.7%', top: '64.2%', width: '27.8%', height: '6.2%', color: clearColor, fontSize: 'clamp(8px, 2.6vw, 15px)' }}
           >
             {clearance}
           </div>
@@ -92,10 +96,10 @@ export function FloorPass({ gate, connected, onSwipe, mintedStr, remainingStr }:
           <img
             src="/mint/connect_wallet_btn.png"
             alt="Connect wallet to mint"
-            className="h-[55px] w-full max-w-[320px] [image-rendering:pixelated]"
+            className="h-[55px] w-full max-w-[340px] [image-rendering:pixelated]"
           />
         ) : (
-          <div className="relative flex h-[62px] w-full max-w-[320px] items-end justify-center border-2 border-[#3E2710] p-2 [background:linear-gradient(180deg,#C99459,#7A4E24)] [box-shadow:inset_0_10px_0_#4A2E12,inset_0_-2px_0_#E0B07A]">
+          <div className="relative flex h-[62px] w-full max-w-[340px] items-end justify-center border-2 border-[#3E2710] p-2 [background:linear-gradient(180deg,#C99459,#7A4E24)] [box-shadow:inset_0_10px_0_#4A2E12,inset_0_-2px_0_#E0B07A]">
             <div
               className="border-2 border-[#3E2710] bg-[#02060E] px-2 py-0.5 font-terminal text-[19px] [text-shadow:0_0_6px_currentColor]"
               style={{ color: readerColor }}
@@ -105,12 +109,6 @@ export function FloorPass({ gate, connected, onSwipe, mintedStr, remainingStr }:
           </div>
         )}
       </button>
-
-      <img
-        src="/mint/one_of_one_banner.png"
-        alt="Find a 1 of 1 duck — 5 true 1-of-1s are hiding in the mint."
-        className="mx-auto mt-3 block w-full max-w-[280px] [image-rendering:pixelated]"
-      />
       </div>
 
       {/* Desktop: Mint Details now lives in its own full-width strip below
@@ -163,8 +161,19 @@ export function FloorPass({ gate, connected, onSwipe, mintedStr, remainingStr }:
         </div>
       )}
 
-      <div className="mt-3 text-center font-terminal text-[15px] font-bold text-white">
-        {mintedStr} / 4,444 already on the floor · {remainingStr} seats left
+      <div className="mt-3 grid grid-cols-3 gap-px bg-[#1B2F52] text-center font-terminal">
+        <div className="bg-[#0B1220] p-2.5">
+          <div className="text-[13px] text-[#8FA3C4]">TOTAL SUPPLY</div>
+          <div className="text-[20px] font-bold text-white">{supplyStr}</div>
+        </div>
+        <div className="bg-[#0B1220] p-2.5">
+          <div className="text-[13px] text-[#8FA3C4]">MINTED</div>
+          <div className="text-[20px] font-bold text-white">{mintedStr}</div>
+        </div>
+        <div className="bg-[#0B1220] p-2.5">
+          <div className="text-[13px] text-[#8FA3C4]">REMAINING</div>
+          <div className="text-[20px] font-bold text-white">{remainingStr}</div>
+        </div>
       </div>
     </div>
   )

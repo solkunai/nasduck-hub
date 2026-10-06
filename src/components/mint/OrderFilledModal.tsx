@@ -1,6 +1,6 @@
 import type { Receipt } from '../../hooks/useMintFlow'
 import { formatNumber } from '../../lib/format'
-import { buildFlexTweet } from '../../lib/mint/config'
+import { buildFlexTweet, fmt, SUPPLY } from '../../lib/mint/config'
 import { openTweetIntent } from '../../lib/share'
 import { MoneyRain } from './MoneyRain'
 
@@ -44,7 +44,7 @@ export function OrderFilledModal({ receipt, recSel, onSelect, onClose }: OrderFi
               </div>
               {current.rank > 0 && (
                 <div className="absolute bottom-2 right-2 bg-[#02060E]/85 px-2 py-1 font-terminal text-[13px] text-[#F7E7C1]">
-                  RANK #{current.rank} / 4,444
+                  RANK #{current.rank} / {fmt(SUPPLY)}
                 </div>
               )}
             </div>
@@ -73,15 +73,19 @@ export function OrderFilledModal({ receipt, recSel, onSelect, onClose }: OrderFi
             <p className="m-0 mb-4 font-terminal text-[18px] text-[#C9D3E3]">Welcome to the floor. Here's what you pulled.</p>
 
             <div className="mb-4 grid grid-cols-2 gap-2.5">
-              {current.attributes.map((t) => (
-                <div key={t.trait_type} className="border border-[#1B2F52] p-2">
-                  <div className="font-terminal text-[16px] text-[#5E7699]">{t.trait_type.toUpperCase()}</div>
-                  <div className="font-terminal text-[22px] text-[#F7E7C1]">{t.value}</div>
-                  <div className="font-terminal text-[15px] text-[#6FBE44]">
-                    {t.trait_type === '1is1' ? '1 OF 1' : `${t.pct}% have this`}
+              {current.attributes.map((t) => {
+                // '1is1' is the pre-rename name, still on the devnet test ducks.
+                const oneOfOne = t.trait_type === '1 of 1' || t.trait_type === '1is1'
+                return (
+                  <div key={t.trait_type} className="border border-[#1B2F52] p-2">
+                    <div className="font-terminal text-[16px] text-[#5E7699]">{t.trait_type.toUpperCase()}</div>
+                    <div className="font-terminal text-[22px] text-[#F7E7C1]">{t.value}</div>
+                    {(oneOfOne || t.pct !== null) && (
+                      <div className="font-terminal text-[15px] text-[#6FBE44]">{oneOfOne ? '1 OF 1' : `${t.pct}% have this`}</div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className="space-y-1 font-terminal text-[16px] text-[#C9D3E3]">
@@ -89,10 +93,18 @@ export function OrderFilledModal({ receipt, recSel, onSelect, onClose }: OrderFi
                 <span>MINTED</span>
                 <span>{receipt.qty}</span>
               </div>
-              <div className="flex justify-between">
-                <span>PRICE</span>
-                <span>{formatNumber(Math.round(receipt.total / receipt.qty))} $NASDUCK each</span>
-              </div>
+              {receipt.otcCount > 0 && (
+                <div className="flex justify-between">
+                  <span>OTC DESK PRICE</span>
+                  <span>{receipt.otcCount} × {formatNumber(receipt.otcEach)} $NASDUCK</span>
+                </div>
+              )}
+              {receipt.publicCount > 0 && (
+                <div className="flex justify-between">
+                  <span>PRICE</span>
+                  <span>{receipt.publicCount} × {formatNumber(receipt.publicEach)} $NASDUCK</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>TOTAL</span>
                 <span>{formatNumber(receipt.total)} $NASDUCK</span>

@@ -24,9 +24,15 @@ async function main() {
   const { join } = await import('path')
   const folderBytes = readdirSync(folder).reduce((sum, f) => sum + statSync(join(folder, f)).size, 0)
   const price = await irys.getPrice(Math.ceil(folderBytes * 1.3))
-  console.log(`[${network}] funding ${price.toString()} atomic units for ${folderBytes.toLocaleString()} bytes...`)
-  await irys.fund(price)
-  console.log(`[${network}] balance after funding:`, (await irys.getBalance()).toString())
+  const balance = await irys.getBalance()
+  if (balance.lt(price)) {
+    const shortfall = price.minus(balance)
+    console.log(`[${network}] funding ${shortfall.toString()} atomic units for ${folderBytes.toLocaleString()} bytes...`)
+    await irys.fund(shortfall)
+    console.log(`[${network}] balance after funding:`, (await irys.getBalance()).toString())
+  } else {
+    console.log(`[${network}] existing balance covers ${price.toString()} atomic units, no funding needed`)
+  }
 
   // Small files (like these metadata JSONs) qualify for Irys's free tier,
   // which has its own request-rate limit separate from account balance —

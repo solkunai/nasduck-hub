@@ -16,6 +16,7 @@ interface PrivyModules {
   useLogin: typeof import('@privy-io/react-auth').useLogin
   useWallets: typeof import('@privy-io/react-auth/solana').useWallets
   useSignTransaction: typeof import('@privy-io/react-auth/solana').useSignTransaction
+  useSignMessage: typeof import('@privy-io/react-auth/solana').useSignMessage
   useExportWallet: typeof import('@privy-io/react-auth/solana').useExportWallet
   toSolanaWalletConnectors: typeof import('@privy-io/react-auth/solana').toSolanaWalletConnectors
 }
@@ -45,6 +46,7 @@ function loadPrivyModules(): Promise<PrivyModules> {
       useLogin: core.useLogin,
       useWallets: solana.useWallets,
       useSignTransaction: solana.useSignTransaction,
+      useSignMessage: solana.useSignMessage,
       useExportWallet: solana.useExportWallet,
       toSolanaWalletConnectors: solana.toSolanaWalletConnectors,
     }),
@@ -126,7 +128,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
           // option — named wallets are pinned to these positions regardless
           // of detection, and 'detected_solana_wallets' covers anything else
           // the visitor has installed that isn't explicitly listed.
-          walletList: ['phantom', 'solflare', 'backpack', 'detected_solana_wallets'],
+          walletList: ['phantom', 'solflare', 'backpack', 'jupiter', 'detected_solana_wallets'],
         },
         embeddedWallets: {
           // Creates a Solana embedded wallet automatically for anyone who
@@ -150,6 +152,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
         useLoginHook={hooks.useLogin}
         useWalletsHook={hooks.useWallets}
         useSignTransactionHook={hooks.useSignTransaction}
+        useSignMessageHook={hooks.useSignMessage}
         useExportWalletHook={hooks.useExportWallet}
       >
         {children}

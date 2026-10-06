@@ -53,10 +53,10 @@ export function RarityModal({ onClose }: { onClose: () => void }) {
 export function FinePrintModal({ onClose }: { onClose: () => void }) {
   return (
     <ModalShell title="FINE PRINT" onClose={onClose}>
-      {/* Fixed column count (not auto-fit) so 5 items never leave an
+      {/* Fixed column count (not auto-fit) so the 6 items never leave an
           orphaned last cell wrapping alone with an ugly empty gap next to
-          it — 1 column stacked on mobile, a clean single row of 5 on desktop. */}
-      <div className="grid grid-cols-1 gap-[3px] bg-[#5A4A30] min-[700px]:grid-cols-5">
+          it — 1 column stacked on mobile, two clean rows of 3 on desktop. */}
+      <div className="grid grid-cols-1 gap-[3px] bg-[#5A4A30] min-[700px]:grid-cols-3">
         {FINE_PRINT_ITEMS.map(([label, body]) => (
           <div key={label} className="bg-[#02060E] p-3.5 font-terminal min-[700px]:p-5">
             <div className="text-[24px] text-[#F5911E] min-[700px]:text-[20px]">{label}</div>

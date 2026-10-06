@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly VITE_RPC_URL?: string
   readonly VITE_JUP_REFERRAL_ACCOUNT?: string
+  readonly VITE_MINT_LIVE?: string
 }
 
 interface ImportMeta {
