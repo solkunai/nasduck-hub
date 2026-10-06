@@ -50,8 +50,8 @@ export function OrderFilledModal({ items, start = 0, receipt, onClose }: OrderFi
           </button>
         </div>
 
-        <div className="flex flex-wrap gap-5">
-          <div className="w-full min-w-0 flex-1 self-start min-[700px]:min-w-[380px]">
+        <div className="flex flex-col gap-3 min-[700px]:flex-row min-[700px]:gap-5">
+          <div className="w-full min-w-0 self-start min-[700px]:min-w-[380px] min-[700px]:flex-1">
             <div className="relative aspect-square w-full overflow-hidden border-2 border-[#02060E]">
               <DuckImage src={current.image} />
               <div className="absolute left-2 top-2 bg-[#F7E7C1] px-2 py-1 font-pixelify text-[13px] text-[#081428] [box-shadow:2px_2px_0_#02060E]">
@@ -77,24 +77,24 @@ export function OrderFilledModal({ items, start = 0, receipt, onClose }: OrderFi
             )}
           </div>
 
-          <div className="w-full min-w-0 flex-1 bg-[#03111E] p-3.5 min-[700px]:min-w-[380px] min-[700px]:p-5">
-            <p className="m-0 mb-4 font-terminal text-[18px] text-[#C9D3E3]">{receipt ? "Welcome to the floor. Here's what you pulled." : 'Your duck, on the record.'}</p>
+          <div className="w-full min-w-0 bg-[#03111E] p-3 min-[700px]:min-w-[380px] min-[700px]:flex-1 min-[700px]:p-5">
+            <p className="m-0 mb-3 font-terminal text-[16px] text-[#C9D3E3] min-[700px]:mb-4 min-[700px]:text-[18px]">{receipt ? "Welcome to the floor. Here's what you pulled." : 'Your duck, on the record.'}</p>
 
-            <div className="mb-4 grid grid-cols-2 gap-2.5">
+            <div className="mb-3 grid grid-cols-2 gap-1.5 min-[700px]:mb-4 min-[700px]:gap-2.5">
               {traits.map((t) => {
                 const note = oneOfOne ? (t.trait_type === '1 of 1' ? null : '1 OF 1') : t.pct !== null ? `${t.pct}% have this` : null
                 return (
-                  <div key={t.trait_type} className="border border-[#2E5590] bg-[#0B1E36] p-2">
-                    <div className="font-terminal text-[16px] text-[#5E7699]">{t.trait_type.toUpperCase()}</div>
-                    <div className="font-terminal text-[22px] text-[#F7E7C1]">{t.value}</div>
-                    {note && <div className="font-terminal text-[15px] text-[#F5911E]">{note}</div>}
+                  <div key={t.trait_type} className="border border-[#2E5590] bg-[#0B1E36] px-2 py-1.5 min-[700px]:p-2">
+                    <div className="font-terminal text-[12px] leading-tight text-[#5E7699] min-[700px]:text-[16px]">{t.trait_type.toUpperCase()}</div>
+                    <div className="font-terminal text-[17px] leading-tight text-[#F7E7C1] min-[700px]:text-[22px]">{t.value}</div>
+                    {note && <div className="font-terminal text-[13px] text-[#F5911E] min-[700px]:text-[15px]">{note}</div>}
                   </div>
                 )
               })}
             </div>
 
             {receipt && (
-              <div className="space-y-1 font-terminal text-[16px] text-[#C9D3E3]">
+              <div className="space-y-1 font-terminal text-[15px] text-[#C9D3E3] min-[700px]:text-[16px]">
                 <div className="flex justify-between">
                   <span>MINTED</span>
                   <span>{receipt.qty}</span>
