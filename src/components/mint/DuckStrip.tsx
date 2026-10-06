@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { MintedDuck } from '../../hooks/useMintFlow'
+import { DuckImage } from './DuckImage'
 
 interface DuckStripProps {
   ducks: MintedDuck[]
@@ -50,7 +51,7 @@ export function DuckStrip({ ducks, selected, onPick, size = 84 }: DuckStripProps
           className="shrink-0 overflow-hidden border-2"
           style={{ width: size, height: size, borderColor: i === selected ? '#F5911E' : '#3A4A66' }}
         >
-          <img src={d.image} alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
+          <DuckImage src={d.image} small />
         </button>
       ))}
     </div>

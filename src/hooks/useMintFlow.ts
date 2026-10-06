@@ -16,6 +16,7 @@ import {
   type WalletAuth,
 } from '../lib/mint/api'
 import { fromBase64, toBase58, toBase64 } from '../lib/mint/encoding'
+import { preloadImage } from '../components/mint/DuckImage'
 
 export type GateState = 'idle' | 'reading' | 'granted' | 'failed'
 export type MintStage = 'idle' | 'preparing' | 'authorizing' | 'signing' | 'settling'
@@ -91,7 +92,7 @@ async function toMintedDuck(asset: SubmitResult['assets'][number]): Promise<Mint
     value: a.value,
     pct: statItem?.attributes.find((x) => x.trait_type === a.trait_type)?.pct ?? null,
   }))
-  return { address: asset.address, id, image: meta?.image ?? statItem?.image ?? '/mint/duck_minted.png', frame: tierColor(tier), rarity: tier, rank, attributes }
+  return { address: asset.address, id, image: meta?.image ?? statItem?.image ?? '', frame: tierColor(tier), rarity: tier, rank, attributes }
 }
 
 const isWalletRejection = (e: unknown) => /reject|cancel|denied|declined|closed/i.test(e instanceof Error ? e.message : String(e))
@@ -196,36 +197,60 @@ export function useMintFlow() {
     [walletAddr, applyStatus],
   )
 
-  // "Your Ducks" gallery: every NasDuck the connected wallet holds, loaded on
-  // connect (so it survives refreshes and return visits). Ducks minted in
-  // this visit are added as they confirm; merging by address avoids doubles.
+  // "Your Ducks" gallery: every NasDuck the connected wallet holds, read from
+  // the wallet (so it survives refreshes and return visits). Wallet data wins
+  // over anything shown so far, which also replaces any placeholder a fresh
+  // mint showed before its details were readable. Merged by address.
+  const syncOwned = useCallback(async (addr: string, isCancelled: () => boolean = () => false) => {
+    // A busy moment (rate limit, slow indexer) shouldn't leave the gallery
+    // empty: retry a few times before giving up until the next sync.
+    let ducks: Awaited<ReturnType<typeof fetchOwned>>['ducks'] | null = null
+    for (const wait of [0, 2000, 5000]) {
+      if (isCancelled()) return
+      if (wait) await new Promise((r) => setTimeout(r, wait))
+      try {
+        ducks = (await fetchOwned(addr)).ducks
+        break
+      } catch {
+        // try again
+      }
+    }
+    if (!ducks) return
+    const loaded: MintedDuck[] = []
+    // A few at a time so a big holder doesn't fire hundreds of requests at once.
+    for (let i = 0; i < ducks.length && !isCancelled(); i += 8) {
+      loaded.push(...(await Promise.all(ducks.slice(i, i + 8).map(toMintedDuck))))
+    }
+    if (isCancelled()) return
+    loaded.sort((a, b) => b.id.localeCompare(a.id))
+    const byAddr = new Map(loaded.map((d) => [d.address, d]))
+    setMine((current) => {
+      const seen = new Set(current.map((d) => d.address))
+      return [...current.map((d) => byAddr.get(d.address) ?? d), ...loaded.filter((d) => !seen.has(d.address))]
+    })
+    setReceipt((r) => (r ? { ...r, items: r.items.map((d) => byAddr.get(d.address) ?? d) } : r))
+  }, [])
+
   useEffect(() => {
     // A different wallet gets its own gallery, never a mix.
     setMine([])
     setSel(0)
     if (!walletAddr) return
     let cancelled = false
-    fetchOwned(walletAddr)
-      .then(async ({ ducks }) => {
-        const loaded: MintedDuck[] = []
-        // A few at a time so a big holder doesn't fire hundreds of requests at once.
-        for (let i = 0; i < ducks.length && !cancelled; i += 8) {
-          loaded.push(...(await Promise.all(ducks.slice(i, i + 8).map(toMintedDuck))))
-        }
-        if (cancelled) return
-        loaded.sort((a, b) => b.id.localeCompare(a.id))
-        setMine((current) => {
-          const seen = new Set(current.map((d) => d.address))
-          return [...current, ...loaded.filter((d) => !seen.has(d.address))]
-        })
-      })
-      .catch(() => {
-        // Gallery just stays as-is; minting is unaffected.
-      })
+    syncOwned(walletAddr, () => cancelled).catch(() => {})
+    // Coming back to the tab re-checks the wallet (at most every 30s).
+    let last = Date.now()
+    const onVisible = () => {
+      if (document.hidden || Date.now() - last < 30_000) return
+      last = Date.now()
+      syncOwned(walletAddr, () => cancelled).catch(() => {})
+    }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       cancelled = true
+      document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [walletAddr])
+  }, [walletAddr, syncOwned])
 
   useEffect(() => {
     setWalletInfo(null)
@@ -452,6 +477,8 @@ export function useMintFlow() {
 
     if (minted.length) {
       const ducks = await Promise.all(minted.map(toMintedDuck))
+      // Open the card with the pictures ready, not swapping in front of you.
+      await Promise.all(ducks.map((d) => preloadImage(d.image)))
       setMine((m) => [...ducks.slice().reverse(), ...m.filter((d) => !ducks.some((x) => x.address === d.address))])
       setSel(0)
       setReceipt({
@@ -471,7 +498,12 @@ export function useMintFlow() {
     setStage('idle')
     setProgress(null)
     refreshWallet(true)
-  }, [wallet, walletAddr, stage, qty, badgeIn, applyStatus, refreshWallet])
+    if (minted.length) {
+      // Re-read the wallet shortly after, so the gallery and reveal show the
+      // real ducks even if their details weren't readable at confirmation.
+      for (const delay of [3000, 10000]) window.setTimeout(() => syncOwned(walletAddr).catch(() => {}), delay)
+    }
+  }, [wallet, walletAddr, stage, qty, badgeIn, applyStatus, refreshWallet, syncOwned])
 
   // --------------------------------------------------------------- quantity
   const ceiling = Math.max(1, maxQty)
@@ -540,6 +572,7 @@ export function useMintFlow() {
     inc,
     setMaxQty,
     resetQty,
+    refreshBalances: () => refreshWallet(true),
     setQtyCustom,
     closeReceipt,
     togglePanel,

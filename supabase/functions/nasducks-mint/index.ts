@@ -53,6 +53,10 @@ const PUBLIC_MACHINE = Deno.env.get('PUBLIC_CANDY_MACHINE')
 const OTC_DESK_COLLECTION = Deno.env.get('OTC_DESK_COLLECTION')
 const SIGNER_SECRET = Deno.env.get('OTC_SIGNER_SECRET_KEY') // JSON byte array
 const MINT_SIGNER_SECRET = Deno.env.get('MINT_SIGNER_SECRET_KEY') // JSON byte array
+// Launch switch: until MINT_OPEN is 'true', only wallets listed in
+// PRELAUNCH_WALLETS (comma-separated) can mint — e.g. for test mints.
+const MINT_OPEN = Deno.env.get('MINT_OPEN') === 'true'
+const PRELAUNCH_WALLETS = new Set((Deno.env.get('PRELAUNCH_WALLETS') ?? '').split(',').map((w) => w.trim()).filter(Boolean))
 const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -567,6 +571,7 @@ Deno.serve(async (req) => {
     // ------------------------------------------------------------ prepare
     if (body.action === 'prepare') {
       const wallet = parseWallet(body.wallet)
+      if (!MINT_OPEN && !PRELAUNCH_WALLETS.has(wallet)) throw new HttpError(403, 'the mint is not open yet')
       const otcQuantity = parseCount(body.otcQuantity, 'otcQuantity')
       const publicQuantity = parseCount(body.publicQuantity, 'publicQuantity')
       if (otcQuantity + publicQuantity === 0) throw new HttpError(400, 'nothing to mint')
@@ -757,13 +762,21 @@ Deno.serve(async (req) => {
         if (p.reservationId) await db.rpc('confirm_otc_reservation', { p_reservation: p.reservationId, p_signature: p.signature })
         const assets = []
         for (const a of p.assets) {
-          try {
-            const asset = await fetchAsset(umi, publicKey(a))
-            assets.push({ address: a, name: asset.name, uri: asset.uri })
-          } catch {
-            // Indexing lag right after confirmation; the mint still happened.
-            assets.push({ address: a, name: '', uri: '' })
+          // Read at 'confirmed' (the level we just waited for): the default
+          // 'finalized' view lags a few seconds and can't see a brand-new duck
+          // yet. Retry briefly in case the RPC node is a moment behind.
+          let found: { name: string; uri: string } | null = null
+          for (let attempt = 0; attempt < 8 && !found; attempt++) {
+            if (attempt) await sleep(1000)
+            try {
+              const asset = await fetchAsset(umi, publicKey(a), { commitment: 'confirmed' })
+              found = { name: asset.name, uri: asset.uri }
+            } catch {
+              // not visible yet
+            }
           }
+          // If still not visible, the mint still happened; the page fills it in later.
+          assets.push({ address: a, name: found?.name ?? '', uri: found?.uri ?? '' })
         }
         results[p.index] = { signature: p.signature, status: 'confirmed', assets }
       }

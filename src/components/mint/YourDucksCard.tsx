@@ -1,4 +1,5 @@
 import type { MintedDuck } from '../../hooks/useMintFlow'
+import { DuckImage } from './DuckImage'
 import { DuckStrip } from './DuckStrip'
 import { buildFlexTweet } from '../../lib/mint/config'
 import { openTweetIntent } from '../../lib/share'
@@ -53,7 +54,7 @@ export function YourDucksCard({ mine, sel, onSelect, onOpen }: YourDucksCardProp
             aria-label={`View NASDUCK ${latest.id} traits`}
             className="relative block aspect-square w-full cursor-pointer overflow-hidden border-2 border-[#02060E]"
           >
-            <img src={latest.image} alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
+            <DuckImage src={latest.image} />
             <div className="absolute left-2 top-2 bg-[#F7E7C1] px-2 py-1 font-pixelify text-[13px] text-[#081428] [box-shadow:2px_2px_0_#02060E]">
               NASDUCK {latest.id}
             </div>
@@ -63,7 +64,6 @@ export function YourDucksCard({ mine, sel, onSelect, onOpen }: YourDucksCardProp
             >
               {latest.rarity}
             </div>
-            <div className="absolute bottom-2 left-2 bg-[#02060E]/85 px-2 py-1 font-terminal text-[13px] text-[#F5911E]">▲ JUST LISTED</div>
             <div className="absolute bottom-2 right-2 bg-[#02060E]/85 px-2 py-1 font-terminal text-[13px] text-[#F7E7C1]">TAP FOR TRAITS</div>
           </button>
 

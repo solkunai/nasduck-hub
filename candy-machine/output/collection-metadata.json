@@ -1,0 +1,16 @@
+{
+  "name": "NasDucks",
+  "symbol": "NASDUCKS",
+  "description": "The NasDucks got fired from Wall Street and hired by degens.",
+  "image": "https://gateway.irys.xyz/8vFCveXu9KDHYoQnyY1Dweq3ekuBAS2gR3n7VRi51uVt",
+  "external_url": "https://nasduck.wtf",
+  "properties": {
+    "files": [
+      {
+        "uri": "https://gateway.irys.xyz/8vFCveXu9KDHYoQnyY1Dweq3ekuBAS2gR3n7VRi51uVt",
+        "type": "image/png"
+      }
+    ],
+    "category": "image"
+  }
+}

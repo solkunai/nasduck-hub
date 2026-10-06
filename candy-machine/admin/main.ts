@@ -196,7 +196,9 @@ async function sendAll(u: Umi, builders: TransactionBuilder[]): Promise<number> 
   const sent: Uint8Array[] = []
   for (const tx of signed) {
     try {
-      sent.push(await u.rpc.sendTransaction(tx, { commitment: 'confirmed' }))
+      // Pre-flight must use the same (confirmed) view as the blockhash above;
+      // the default (finalized) lags and rejects fresh blockhashes.
+      sent.push(await u.rpc.sendTransaction(tx, { commitment: 'confirmed', preflightCommitment: 'confirmed' }))
     } catch (e) {
       failed++
       log(`send failed: ${errorDetail(e)}`, 'bad')
@@ -407,6 +409,27 @@ async function stepFlip(to: 'public' | 'otc') {
   log('Flip sent but not yet visible on-chain; run Verify in a minute.', 'bad')
 }
 
+// Applies the configured floor to both machines, keeping each one's current
+// mode (the OTC machine stays holders-only or public, whichever it is now).
+async function stepFloor() {
+  const c = cfg()
+  const s = saved()
+  if (!umi || !s.otcMachine || !s.publicMachine) return log('Connect Phantom and finish setup first.', 'bad')
+  const otcCm = await fetchCandyMachine(umi, publicKey(s.otcMachine))
+  const otcGuard = await fetchCandyGuard(umi, otcCm.mintAuthority)
+  const tps = otcGuard.guards.thirdPartySigner
+  const holdersOnly = tps.__option === 'Some' && tps.value.signerKey === c.otcSigner
+  const u = await ready(`Set the floor to ${c.floorPrice} tokens per mint on both machines (part of the $5/$2, not extra). OTC machine stays ${holdersOnly ? 'holders-only' : 'public'}.`)
+  if (!u) return
+  const pubCm = await fetchCandyMachine(u, publicKey(s.publicMachine))
+  const pubGuard = await fetchCandyGuard(u, pubCm.mintAuthority)
+  const failed = await sendAll(u, [
+    updateCandyGuard(u, { candyGuard: otcGuard.publicKey, guards: guardsFor('otc', c, holdersOnly), groups: [] }),
+    updateCandyGuard(u, { candyGuard: pubGuard.publicKey, guards: guardsFor('public', c), groups: [] }),
+  ])
+  log(failed ? 'Floor update: FAILED' : `Floor set to ${c.floorPrice} tokens on both machines. Run Verify to confirm.`, failed ? 'bad' : 'ok')
+}
+
 async function stepClose() {
   const s = saved()
   if (!umi || !s.otcMachine || !s.publicMachine) return log('Nothing to close.', 'bad')
@@ -457,6 +480,7 @@ const steps: Record<string, () => Promise<unknown>> = {
   verify: stepVerify,
   'flip-public': () => stepFlip('public'),
   'flip-otc': () => stepFlip('otc'),
+  floor: stepFloor,
   close: stepClose,
 }
 document.querySelectorAll<HTMLButtonElement>('button[data-step]').forEach((btn) => {

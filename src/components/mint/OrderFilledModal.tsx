@@ -4,6 +4,7 @@ import { formatNumber } from '../../lib/format'
 import { buildFlexTweet, fmt, SUPPLY } from '../../lib/mint/config'
 import { openTweetIntent } from '../../lib/share'
 import { PixelXLogo } from './PixelXLogo'
+import { DuckImage } from './DuckImage'
 import { DuckStrip } from './DuckStrip'
 import { MoneyRain } from './MoneyRain'
 
@@ -41,7 +42,7 @@ export function OrderFilledModal({ items, start = 0, receipt, onClose }: OrderFi
       >
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <img src="/mint/duck_minted.png" alt="" className="h-9 w-9 border-2 border-[#02060E] [image-rendering:pixelated]" />
+            <div className="h-9 w-9 shrink-0 overflow-hidden border-2 border-[#02060E]"><DuckImage src={current.image} small /></div>
             <h2 className="m-0 font-silkscreen text-[clamp(28px,4vw,44px)] font-bold text-[#B4600C]">{receipt ? 'ORDER FILLED' : `NASDUCK ${current.id}`}</h2>
           </div>
           <button type="button" onClick={onClose} className="font-pixelify text-[20px] text-[#3B2F1E]">
@@ -52,7 +53,7 @@ export function OrderFilledModal({ items, start = 0, receipt, onClose }: OrderFi
         <div className="flex flex-wrap gap-5">
           <div className="w-full min-w-0 flex-1 self-start min-[700px]:min-w-[380px]">
             <div className="relative aspect-square w-full overflow-hidden border-2 border-[#02060E]">
-              <img src={current.image} alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
+              <DuckImage src={current.image} />
               <div className="absolute left-2 top-2 bg-[#F7E7C1] px-2 py-1 font-pixelify text-[13px] text-[#081428] [box-shadow:2px_2px_0_#02060E]">
                 NASDUCK {current.id}
               </div>

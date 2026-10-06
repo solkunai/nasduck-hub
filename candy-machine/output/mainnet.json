@@ -1,0 +1,15 @@
+{
+  "cluster": "mainnet",
+  "created": "2026-10-06 via admin page (authority signed in Phantom)",
+  "authority": "35CgjGqpkzkdL8hbWnbLSEQzrnLpUBgkFuCYM7ZAHsYQ",
+  "collection": "7pMsotmNCL6XGmtyWvUddFfYLRYrnwSA4DCcrmhApZHw",
+  "otcMachine": "3xSEq6fcLKEA4RnvVUPbrEPRBoALmR23dEMNpo73AJHh",
+  "publicMachine": "8Zc3M6HPpF6kGM9dgj69HvdcPGYSHkJFnsJukVnx5wtr",
+  "otcSigner": "DZnR9yWprW88EeuCg7eMDeD2pLPiSrNwXKdnzBt92GpV",
+  "mintSigner": "2kZBtWj71pWnNRKAYuNUSJGuuZLUkaiVBQybES3sfFXS",
+  "paymentWallet": "5VLFrEeyDsYkvhsf6SLbuZNkxc7PqcJ6fB6thQvonBwf",
+  "paymentTokenAccount": "GCDSw6pBMVhgR2oTDJ9dYtw9Vqs56sD4b6DKDyCofkTH",
+  "royaltyWallet": "7uf7v4rHwDLEYwwrn9fcnYdsoS8JC7iGdMvbX7191F2V",
+  "otcDeskCollection": "D7sLW9uKZG3G7bNbWfMHvKSgVhU9nXdv7huTfepF5Jrh",
+  "floorTokens": 1
+}

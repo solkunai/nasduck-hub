@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { useMintFlow } from '../../hooks/useMintFlow'
 import { MINT_LIVE } from '../../lib/mint/config'
+import { SwapModal } from './SwapModal'
 
 interface TradingFloorProps {
   walletShort: string
@@ -22,6 +23,7 @@ function HoldCountdown({ until }: { until: number }) {
 
 export function TradingFloor({ walletShort, m }: TradingFloorProps) {
   const [confirmingLogout, setConfirmingLogout] = useState(false)
+  const [swapping, setSwapping] = useState(false)
   const { stage, qty, dec, inc, setMaxQty, resetQty, setQtyCustom, onMint, logout: onLogout } = m
   const ready = MINT_LIVE && stage === 'idle' && !m.blockedReason
 
@@ -74,14 +76,32 @@ export function TradingFloor({ walletShort, m }: TradingFloorProps) {
           <div>BALANCE: {m.balanceLabel}</div>
           <div className="text-[#B4600C]">CLEARED TO MINT</div>
         </div>
-        <button
-          type="button"
-          onClick={() => setConfirmingLogout(true)}
-          className="border-[3px] border-[#F7E7C1] bg-[#A0520C] px-3 py-1 font-pixelify text-[14px] font-bold text-[#F7E7C1] outline outline-2 outline-[#A0520C] [box-shadow:4px_4px_0_#02060E] hover:bg-[#F7E7C1] hover:text-[#A0520C]"
-        >
-          CLOCK OUT
-        </button>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => setSwapping(true)}
+            className="border-[3px] border-[#02060E] bg-[#F5911E] px-3 py-1 font-pixelify text-[14px] font-bold text-[#02060E] [box-shadow:4px_4px_0_#02060E]"
+          >
+            GET $NASDUCK
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmingLogout(true)}
+            className="border-[3px] border-[#F7E7C1] bg-[#A0520C] px-3 py-1 font-pixelify text-[14px] font-bold text-[#F7E7C1] outline outline-2 outline-[#A0520C] [box-shadow:4px_4px_0_#02060E] hover:bg-[#F7E7C1] hover:text-[#A0520C]"
+          >
+            CLOCK OUT
+          </button>
+        </div>
       </div>
+
+      {swapping && (
+        <SwapModal
+          onClose={() => {
+            setSwapping(false)
+            m.refreshBalances()
+          }}
+        />
+      )}
 
       {confirmingLogout && (
         <div
@@ -251,6 +271,16 @@ export function TradingFloor({ walletShort, m }: TradingFloorProps) {
         {stage !== 'idle' && <span aria-hidden className="inline-block h-5 w-5 shrink-0 animate-spin rounded-full border-[3px] border-[#F5911E] border-t-transparent" />}
         <span>{ctaLabel}</span>
       </button>
+
+      {MINT_LIVE && stage === 'idle' && m.blockedReason === 'NOT ENOUGH $NASDUCK' && (
+        <button
+          type="button"
+          onClick={() => setSwapping(true)}
+          className="mt-2 w-full border-2 border-[#F5911E] py-2.5 font-pixelify text-[18px] font-bold text-white"
+        >
+          SWAP SOL → $NASDUCK
+        </button>
+      )}
 
       {m.mintError && (
         <div role="alert" className="mt-2 border-2 border-[#FF5A4E] bg-[#02060E] p-2 text-center font-terminal text-[15px] text-[#FF5A4E]">

@@ -65,15 +65,19 @@ export const CONFIGS: Record<Cluster, LaunchConfig> = {
     genesisHash: '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d',
     authority: '35CgjGqpkzkdL8hbWnbLSEQzrnLpUBgkFuCYM7ZAHsYQ',
     collectionName: 'NasDucks',
-    collectionUri: null,
+    // Logo + description on Arweave (see output/collection-metadata.json).
+    collectionUri: 'https://gateway.irys.xyz/vhkh4iSnZMPQJWE3BZTdHr9SrFmTDJE1w8TyhfdKXNH',
     royaltyBasisPoints: 500,
     royaltyWallet: '7uf7v4rHwDLEYwwrn9fcnYdsoS8JC7iGdMvbX7191F2V',
     paymentMint: '7Y7V1a4m2nWK7BMgbka5B4vR1pDvCK7yva3Hnrqkraze',
     paymentDecimals: 6,
     paymentWallet: '5VLFrEeyDsYkvhsf6SLbuZNkxc7PqcJ6fB6thQvonBwf', // Ledger
-    otcSigner: null,
-    mintSigner: null,
-    floorPrice: null,
+    otcSigner: 'DZnR9yWprW88EeuCg7eMDeD2pLPiSrNwXKdnzBt92GpV',
+    mintSigner: '2kZBtWj71pWnNRKAYuNUSJGuuZLUkaiVBQybES3sfFXS',
+    // Part of the $5/$2, never extra: the backend tops up to the live dollar
+    // price. Set to the minimum (1 token) so price moves can never affect
+    // what buyers pay; the backend signature is the real gate.
+    floorPrice: 1n,
     metadataBase: METADATA_BASE,
     otcItems: split.otc,
     publicItems: split.public,
