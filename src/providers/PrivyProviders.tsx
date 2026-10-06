@@ -84,7 +84,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
     // goal, just less precisely timed.
     const hasIdleCallback = typeof window.requestIdleCallback === 'function'
     const idle: (cb: () => void) => number = hasIdleCallback
-      ? (cb) => window.requestIdleCallback(cb)
+      // timeout: pages with constant animation (e.g. /mint) may never go
+      // idle, so load within 2s regardless.
+      ? (cb) => window.requestIdleCallback(cb, { timeout: 2000 })
       : (cb) => window.setTimeout(cb, 200)
     const cancelIdle: (id: number) => void = hasIdleCallback
       ? (id) => window.cancelIdleCallback(id)

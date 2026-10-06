@@ -281,16 +281,33 @@ export function useMintFlow() {
   // into it.
   const SCAN_AFTER_CONNECT_MS = 1000
 
-  const badgeIn = useCallback(() => {
-    if ((gate !== 'idle' && gate !== 'failed') || wallet.connected) return
-    setGate('reading')
+  // A click before the wallet system has loaded is remembered and acted on
+  // the moment it's ready, instead of being silently dropped.
+  const pendingLogin = useRef(false)
+  const openLogin = useCallback(() => {
     wallet.login(() => {
       window.clearTimeout(gateTimeout.current)
       setGate((g) => (g === 'reading' ? 'failed' : g))
     })
+  }, [wallet])
+
+  const badgeIn = useCallback(() => {
+    if ((gate !== 'idle' && gate !== 'failed') || wallet.connected) return
+    setGate('reading')
+    if (wallet.ready) openLogin()
+    else pendingLogin.current = true
     // Safety net: never leave the reader stuck on "reading".
-    gateTimeout.current = window.setTimeout(() => setGate((g) => (g === 'reading' ? 'failed' : g)), 45000)
-  }, [gate, wallet])
+    gateTimeout.current = window.setTimeout(() => {
+      pendingLogin.current = false
+      setGate((g) => (g === 'reading' ? 'failed' : g))
+    }, 30000)
+  }, [gate, wallet.connected, wallet.ready, openLogin])
+
+  useEffect(() => {
+    if (!wallet.ready || !pendingLogin.current) return
+    pendingLogin.current = false
+    openLogin()
+  }, [wallet.ready, openLogin])
 
   useEffect(() => {
     if (gate !== 'reading' || !wallet.connected) return

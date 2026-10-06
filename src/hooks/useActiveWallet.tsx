@@ -107,9 +107,16 @@ export function PrivyActiveWalletPublisher({
   const login = useCallback(
     (onError?: () => void) => {
       onLoginErrorRef.current = onError
+      // Privy ignores login() for a session that's still authenticated, which
+      // leaves someone whose wallet has since disconnected (locked, switched
+      // accounts) clicking "connect" with nothing happening. Start fresh.
+      if (authenticated && walletsReady && wallets.length === 0) {
+        logout().finally(() => privyLogin())
+        return
+      }
       privyLogin()
     },
-    [privyLogin],
+    [privyLogin, authenticated, walletsReady, wallets.length, logout],
   )
 
   // A user can in principle have more than one Solana wallet linked

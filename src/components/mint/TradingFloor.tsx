@@ -181,53 +181,57 @@ export function TradingFloor({ walletShort, m }: TradingFloorProps) {
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-center gap-5">
-        <button
-          type="button"
-          onClick={dec}
-          className="h-11 w-11 font-pixelify text-[22px] font-bold text-[#F7E7C1]"
-          style={{
-            borderImageSource: 'url(/mint/qty_btn_frame.png)',
-            borderImageSlice: '125 125 125 125',
-            borderImageWidth: '8px',
-            borderImageRepeat: 'stretch',
-            borderStyle: 'solid',
-            borderWidth: '8px',
-          }}
-        >
-          −
-        </button>
-        <div className="text-center">
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            value={qty}
-            onChange={(e) => {
-              const digits = e.target.value.replace(/[^0-9]/g, '')
-              if (digits === '') return
-              setQtyCustom(Number(digits))
+      {/* Phones: − qty + on one line, MAX/RESET side by side underneath.
+          Wider screens: everything on one line, MAX/RESET stacked. */}
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-3">
+        <div className="flex items-center gap-3 sm:gap-5">
+          <button
+            type="button"
+            onClick={dec}
+            className="h-11 w-11 font-pixelify text-[22px] font-bold text-[#F7E7C1]"
+            style={{
+              borderImageSource: 'url(/mint/qty_btn_frame.png)',
+              borderImageSlice: '125 125 125 125',
+              borderImageWidth: '8px',
+              borderImageRepeat: 'stretch',
+              borderStyle: 'solid',
+              borderWidth: '8px',
             }}
-            className="w-[110px] bg-transparent text-center font-terminal text-[48px] leading-none text-white outline-none"
-          />
-          <div className="font-terminal text-[13px] text-white">SHARES OF DUCK</div>
+          >
+            −
+          </button>
+          <div className="text-center">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={qty}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/[^0-9]/g, '')
+                if (digits === '') return
+                setQtyCustom(Number(digits))
+              }}
+              className="w-[84px] bg-transparent text-center font-terminal text-[40px] leading-none text-white outline-none sm:w-[110px] sm:text-[48px]"
+            />
+            <div className="font-terminal text-[13px] text-white">SHARES OF DUCK</div>
+          </div>
+          <button
+            type="button"
+            onClick={inc}
+            className="h-11 w-11 font-pixelify text-[22px] font-bold text-[#F7E7C1]"
+            style={{
+              borderImageSource: 'url(/mint/qty_btn_frame.png)',
+              borderImageSlice: '125 125 125 125',
+              borderImageWidth: '8px',
+              borderImageRepeat: 'stretch',
+              borderStyle: 'solid',
+              borderWidth: '8px',
+            }}
+          >
+            +
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={inc}
-          className="h-11 w-11 font-pixelify text-[22px] font-bold text-[#F7E7C1]"
-          style={{
-            borderImageSource: 'url(/mint/qty_btn_frame.png)',
-            borderImageSlice: '125 125 125 125',
-            borderImageWidth: '8px',
-            borderImageRepeat: 'stretch',
-            borderStyle: 'solid',
-            borderWidth: '8px',
-          }}
-        >
-          +
-        </button>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex basis-full justify-center gap-2 sm:basis-auto sm:flex-col sm:gap-1.5">
           <button
             type="button"
             onClick={setMaxQty}
@@ -250,7 +254,7 @@ export function TradingFloor({ walletShort, m }: TradingFloorProps) {
         <div className="font-terminal text-[13px] text-white">
           ORDER TOTAL{m.totalUsd !== null ? ` · ${usdStr(m.totalUsd)}` : ''}
         </div>
-        <div className="font-terminal text-[38px] text-[#F0E4CC]">≈ {m.totalTokensStr} $NASDUCK</div>
+        <div className="font-terminal text-[30px] text-[#F0E4CC] sm:text-[38px]">≈ {m.totalTokensStr} $NASDUCK</div>
         <div className="font-terminal text-[16px] text-white [text-shadow:0_0_6px_rgba(255,255,255,.25)]">LIVE PRICE · EXACT AMOUNT SHOWN IN YOUR WALLET</div>
         {m.otcQty > 0 && (
           <div className="font-terminal text-[13px] text-[#F5911E]">
