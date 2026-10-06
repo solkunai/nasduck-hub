@@ -13,7 +13,7 @@ import {
   type TransactionBuilder,
   type Umi,
 } from 'npm:@metaplex-foundation/umi@1.6.0'
-import { base58, base64 } from 'npm:@metaplex-foundation/umi@1.6.0/serializers'
+import { base58, base64, publicKey as publicKeySerializer } from 'npm:@metaplex-foundation/umi@1.6.0/serializers'
 import { fetchAsset, mplCore } from 'npm:@metaplex-foundation/mpl-core@1.10.0'
 import {
   fetchCandyGuard,
@@ -24,12 +24,16 @@ import {
 } from 'npm:@metaplex-foundation/mpl-core-candy-machine@0.3.0'
 import { dynamicCorsHeaders } from '../_shared/cors.ts'
 
-// NasDucks mint backend. Two Candy Machines presented to users as one pool:
-//   OTC machine    — holders-only while open: thirdPartySigner guard means
-//                    only transactions this function signed can mint, one
-//                    per OTC Desk NFT ever (tracked in otc_mint_claims).
-//                    Once flipped to public, its leftovers mint like normal.
-//   Public machine — anyone, public price; holds the 1-of-1s.
+// NasDucks mint backend. Two Candy Machines presented to users as one pool.
+// Both require a backend signature (thirdPartySigner guard), so every mint
+// goes through this function, which prices it in dollars at the live
+// $NASDUCK rate: the guard charges a small fixed floor and each transaction
+// carries a top-up transfer for the rest. Changing the amount breaks our
+// signature, so the price can't be altered or skipped.
+//   OTC machine    — signed by the OTC signer while holders-only: $2, one per
+//                    OTC Desk NFT ever (tracked in otc_mint_claims). Flipping
+//                    it to public = switching its guard to the mint signer.
+//   Public machine — signed by the mint signer: $5, anyone; holds the 1-of-1s.
 //
 //   status   — supply/prices/open state (cached, see nasducks_mint_stats);
 //              with a wallet: OTC desks + balances
@@ -39,6 +43,7 @@ import { dynamicCorsHeaders } from '../_shared/cors.ts'
 //              machines), waits for confirmation, records OTC claims, and
 //              returns the minted ducks
 //   confirm  — fallback: record OTC claims from signatures, chain-verified
+//   owned    — the NasDucks a wallet holds (for the "Your Ducks" gallery)
 //
 // Fails closed: any missing config/secret means nothing is signed or sent.
 
@@ -47,6 +52,7 @@ const OTC_MACHINE = Deno.env.get('OTC_CANDY_MACHINE')
 const PUBLIC_MACHINE = Deno.env.get('PUBLIC_CANDY_MACHINE')
 const OTC_DESK_COLLECTION = Deno.env.get('OTC_DESK_COLLECTION')
 const SIGNER_SECRET = Deno.env.get('OTC_SIGNER_SECRET_KEY') // JSON byte array
+const MINT_SIGNER_SECRET = Deno.env.get('MINT_SIGNER_SECRET_KEY') // JSON byte array
 const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -65,6 +71,17 @@ const MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'
 // The public mint snapshot (nasducks_mint_stats) is re-read from chain at
 // most this often, however many visitors are polling.
 const STATS_MAX_AGE_MS = 10_000
+// Dollar prices. Quotes use the real $NASDUCK market price on both clusters
+// (the devnet test token has no market).
+const PUBLIC_PRICE_USD = 5
+const OTC_PRICE_USD = 2
+const PRICE_MINT = '7Y7V1a4m2nWK7BMgbka5B4vR1pDvCK7yva3Hnrqkraze'
+const PRICE_TTL_MS = 15_000 // sample Jupiter at most this often (shared)
+const PRICE_STALE_MAX_MS = 60_000 // never quote from an older sample
+const PRICE_WINDOW_MS = 5 * 60_000 // median window for the sanity check
+const PRICE_MAX_DEVIATION = 0.3 // pause if the price is >30% off the median
+const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+const ATA_PROGRAM = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
 const UUID_RE = /nasducks-otc:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/
 
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void }
@@ -115,9 +132,9 @@ async function rpc<T>(method: string, params: unknown): Promise<T> {
 // ---------------------------------------------------------------- machines
 
 type Payment = { amount: bigint; mint: PublicKey; destinationAta: PublicKey }
-type Machine = { cm: CandyMachine; remaining: number; payment: Payment | null; requiresSigner: boolean; signerIsOurs: boolean }
+type Machine = { cm: CandyMachine; remaining: number; payment: Payment | null; signer: string | null }
 
-async function loadMachine(umi: Umi, address: string, signer: Signer): Promise<Machine> {
+async function loadMachine(umi: Umi, address: string): Promise<Machine> {
   const cm = await fetchCandyMachine(umi, publicKey(address))
   const guard = await fetchCandyGuard(umi, cm.mintAuthority)
   const tps = guard.guards.thirdPartySigner
@@ -126,18 +143,102 @@ async function loadMachine(umi: Umi, address: string, signer: Signer): Promise<M
     cm,
     remaining: Number(cm.data.itemsAvailable) - Number(cm.itemsRedeemed),
     payment: pay.__option === 'Some' ? pay.value : null,
-    requiresSigner: tps.__option === 'Some',
-    signerIsOurs: tps.__option === 'Some' && tps.value.signerKey === signer.publicKey,
+    signer: tps.__option === 'Some' ? tps.value.signerKey : null,
   }
 }
 
-async function loadMachines(umi: Umi, signer: Signer) {
-  const [otc, pub] = await Promise.all([loadMachine(umi, OTC_MACHINE!, signer), loadMachine(umi, PUBLIC_MACHINE!, signer)])
-  const otcOpen = otc.requiresSigner && otc.signerIsOurs && !!otc.payment
+// Which signer a machine's guard names decides what it is: the OTC signer =
+// holders-only $2, the mint signer = public $5. Anything else = closed.
+async function loadMachines(umi: Umi, otcSigner: Signer, mintSigner: Signer) {
+  const [otc, pub] = await Promise.all([loadMachine(umi, OTC_MACHINE!), loadMachine(umi, PUBLIC_MACHINE!)])
+  const otcOpen = otc.signer === otcSigner.publicKey && !!otc.payment
   // After the flip, the OTC machine's leftovers are minted like the public pool.
-  const otcIsPublic = !otc.requiresSigner && !!otc.payment
-  const publicPools = [pub, ...(otcIsPublic ? [otc] : [])].filter((m) => m.payment && !m.requiresSigner)
+  const otcIsPublic = otc.signer === mintSigner.publicKey && !!otc.payment
+  const pubOpen = pub.signer === mintSigner.publicKey && !!pub.payment
+  const publicPools = [...(pubOpen ? [pub] : []), ...(otcIsPublic ? [otc] : [])]
   return { otc, pub, otcOpen, publicPools }
+}
+
+// ------------------------------------------------------------------ pricing
+
+async function fetchJupiterUsd(): Promise<number> {
+  const res = await fetch(`https://lite-api.jup.ag/price/v3?ids=${PRICE_MINT}`)
+  if (!res.ok) throw new Error(`price source HTTP ${res.status}`)
+  const usd = Number((await res.json())?.[PRICE_MINT]?.usdPrice)
+  if (!Number.isFinite(usd) || usd <= 0) throw new Error('price source returned no price')
+  return usd
+}
+
+// Live $NASDUCK/USD, sampled at most every PRICE_TTL_MS for all callers, and
+// refused if missing, stale, or far from the recent median.
+async function nasduckUsd(db: SupabaseClient): Promise<number> {
+  const recent = async () => {
+    const { data, error } = await db
+      .from('nasduck_price_samples')
+      .select('usd, sampled_at')
+      .gte('sampled_at', new Date(Date.now() - PRICE_WINDOW_MS).toISOString())
+      .order('sampled_at', { ascending: false })
+      .limit(100)
+    if (error) throw new Error('price lookup failed')
+    return (data ?? []).map((r) => ({ usd: Number(r.usd), at: Date.parse(r.sampled_at) }))
+  }
+  let samples = await recent()
+  if (!samples.length || Date.now() - samples[0].at > PRICE_TTL_MS) {
+    const { data: won } = await db.rpc('claim_price_refresh', { p_min_gap_seconds: PRICE_TTL_MS / 1000 })
+    if (won) {
+      try {
+        const usd = await fetchJupiterUsd()
+        await db.from('nasduck_price_samples').insert({ usd })
+        await db.from('nasduck_price_samples').delete().lt('sampled_at', new Date(Date.now() - 86_400_000).toISOString())
+      } catch (e) {
+        console.error('nasducks-mint price refresh failed:', e instanceof Error ? e.message : 'unknown')
+      }
+    } else {
+      await sleep(1000) // someone else is refreshing
+    }
+    samples = await recent()
+  }
+  if (!samples.length || Date.now() - samples[0].at > PRICE_STALE_MAX_MS) throw new HttpError(503, 'live $NASDUCK price unavailable, try again shortly')
+  const sorted = samples.map((s) => s.usd).sort((a, b) => a - b)
+  const median = sorted[Math.floor(sorted.length / 2)]
+  const latest = samples[0].usd
+  if (Math.abs(latest - median) / median > PRICE_MAX_DEVIATION) {
+    throw new HttpError(503, '$NASDUCK price is moving too fast to quote fairly, try again in a few minutes')
+  }
+  return latest
+}
+
+type Quote = { nasduckUsd: number; public: bigint; otc: bigint }
+
+// Base units of $NASDUCK per mint, rounded up so the dollar price is met.
+function quoteFor(usd: number, decimals: number): Quote {
+  const units = (dollars: number) => BigInt(Math.ceil((dollars / usd) * 10 ** decimals))
+  return { nasduckUsd: usd, public: units(PUBLIC_PRICE_USD), otc: units(OTC_PRICE_USD) }
+}
+
+// Token-2022 TransferChecked of the part of the price above the guard's
+// floor, from the minter's token account to the treasury's.
+function topUpIx(umi: Umi, minter: PublicKey, pay: Payment, decimals: number, amount: bigint) {
+  const pk = publicKeySerializer()
+  const [source] = umi.eddsa.findPda(publicKey(ATA_PROGRAM), [pk.serialize(minter), pk.serialize(publicKey(TOKEN_2022_PROGRAM)), pk.serialize(pay.mint)])
+  const data = new Uint8Array(10)
+  data[0] = 12 // TransferChecked
+  new DataView(data.buffer).setBigUint64(1, amount, true)
+  data[9] = decimals
+  return {
+    instruction: {
+      programId: publicKey(TOKEN_2022_PROGRAM),
+      keys: [
+        { pubkey: source, isSigner: false, isWritable: true },
+        { pubkey: pay.mint, isSigner: false, isWritable: false },
+        { pubkey: pay.destinationAta, isSigner: false, isWritable: true },
+        { pubkey: minter, isSigner: true, isWritable: false },
+      ],
+      data,
+    },
+    signers: [],
+    bytesCreatedOnChain: 0,
+  }
 }
 
 // --------------------------------------------------------- public snapshot
@@ -177,9 +278,20 @@ const rowToStats = (r: StatsRow): Stats => ({
   refreshedAt: r.refreshed_at,
 })
 
-async function refreshStats(db: SupabaseClient, umi: Umi, signer: Signer): Promise<Stats> {
-  const { otc, pub, otcOpen, publicPools } = await loadMachines(umi, signer)
+async function refreshStats(db: SupabaseClient, umi: Umi, signer: Signer, mintSigner: Signer): Promise<Stats> {
+  const { otc, pub, otcOpen, publicPools } = await loadMachines(umi, signer, mintSigner)
   const paymentMint = pub.payment?.mint ?? otc.payment?.mint ?? null
+  const decimals = paymentMint ? (await rpc<{ value: { decimals: number } }>('getTokenSupply', [paymentMint])).value.decimals : null
+  // Prices shown are live quotes; a price outage shows as "no price" rather
+  // than hiding supply.
+  let quote: Quote | null = null
+  if (decimals !== null) {
+    try {
+      quote = quoteFor(await nasduckUsd(db), decimals)
+    } catch {
+      quote = null
+    }
+  }
   const stats: Stats = {
     cluster: CLUSTER!,
     supply: Number(otc.cm.data.itemsAvailable) + Number(pub.cm.data.itemsAvailable),
@@ -189,9 +301,9 @@ async function refreshStats(db: SupabaseClient, umi: Umi, signer: Signer): Promi
     otcRemaining: otcOpen ? otc.remaining : 0,
     prices: {
       mint: paymentMint,
-      decimals: paymentMint ? (await rpc<{ value: { decimals: number } }>('getTokenSupply', [paymentMint])).value.decimals : null,
-      public: pub.payment?.amount.toString() ?? null,
-      otc: otcOpen ? otc.payment!.amount.toString() : null,
+      decimals,
+      public: quote && publicPools.length ? quote.public.toString() : null,
+      otc: quote && otcOpen ? quote.otc.toString() : null,
     },
     refreshedAt: new Date().toISOString(),
   }
@@ -215,15 +327,15 @@ async function refreshStats(db: SupabaseClient, umi: Umi, signer: Signer): Promi
 
 // Serves the cached snapshot; only one caller per window re-reads the chain.
 // `force` (after a confirmed mint) shortens the window so counts move at once.
-async function currentStats(db: SupabaseClient, umi: Umi, signer: Signer, force = false): Promise<Stats> {
+async function currentStats(db: SupabaseClient, umi: Umi, signer: Signer, mintSigner: Signer, force = false): Promise<Stats> {
   const { data } = await db.from('nasducks_mint_stats').select('*').eq('id', 1).maybeSingle()
   const row = data && (data as StatsRow).cluster === CLUSTER ? (data as StatsRow) : null
-  if (!row) return refreshStats(db, umi, signer)
+  if (!row) return refreshStats(db, umi, signer, mintSigner)
   if (!force && Date.now() - Date.parse(row.refreshed_at) < STATS_MAX_AGE_MS) return rowToStats(row)
   const { data: won } = await db.rpc('claim_mint_stats_refresh', { p_min_gap_seconds: force ? 2 : 5 })
   if (!won) return rowToStats(row)
   try {
-    return await refreshStats(db, umi, signer)
+    return await refreshStats(db, umi, signer, mintSigner)
   } catch (e) {
     console.error('nasducks-mint stats refresh failed:', scrub(e instanceof Error ? e.message : 'unknown'))
     return rowToStats(row)
@@ -322,9 +434,9 @@ function verifyWalletAuth(umi: Umi, wallet: PublicKey, auth: unknown) {
 
 // ------------------------------------------------------- transaction build
 
-type Prepared = { kind: 'otc' | 'public'; reservationId?: string; assets: string[]; transaction: string }
+type Prepared = { kind: 'otc' | 'public'; reservationId?: string; assets: string[]; cost: string; transaction: string }
 
-function mintIx(umi: Umi, m: Machine, minter: Signer, otcSigner?: Signer) {
+function mintIx(umi: Umi, m: Machine, minter: Signer, machineSigner: Signer) {
   const asset = generateSigner(umi)
   const pay = m.payment!
   const builder = mintV1(umi, {
@@ -334,7 +446,7 @@ function mintIx(umi: Umi, m: Machine, minter: Signer, otcSigner?: Signer) {
     minter,
     payer: minter,
     mintArgs: {
-      ...(otcSigner ? { thirdPartySigner: some({ signer: otcSigner }) } : {}),
+      thirdPartySigner: some({ signer: machineSigner }),
       token2022Payment: some({ mint: pay.mint, destinationAta: pay.destinationAta }),
     },
   })
@@ -373,7 +485,7 @@ Deno.serve(async (req) => {
   try {
     if (
       !CLUSTER || !['devnet', 'mainnet'].includes(CLUSTER) || !OTC_MACHINE || !PUBLIC_MACHINE || !OTC_DESK_COLLECTION ||
-      !SIGNER_SECRET || !HELIUS_API_KEY || !SUPABASE_URL || !SERVICE_ROLE_KEY
+      !SIGNER_SECRET || !MINT_SIGNER_SECRET || !HELIUS_API_KEY || !SUPABASE_URL || !SERVICE_ROLE_KEY
     ) {
       return json({ error: 'mint not configured' }, 503, cors)
     }
@@ -395,17 +507,22 @@ Deno.serve(async (req) => {
     const umi = createUmi(heliusUrl()).use(mplCore()).use(mplCandyMachine())
     const signer = createSignerFromKeypair(umi, umi.eddsa.createKeypairFromSecretKey(new Uint8Array(JSON.parse(SIGNER_SECRET))))
     umi.use(signerIdentity(signer))
+    const mintSigner = createSignerFromKeypair(umi, umi.eddsa.createKeypairFromSecretKey(new Uint8Array(JSON.parse(MINT_SIGNER_SECRET))))
 
     // ------------------------------------------------------------- status
     if (body.action === 'status') {
-      const stats = await currentStats(db, umi, signer)
+      const stats = await currentStats(db, umi, signer, mintSigner)
       const paymentMint = stats.prices.mint
       const out: Record<string, unknown> = { ...stats }
       if (body.wallet !== undefined) {
         const wallet = parseWallet(body.wallet)
         const desks = await heldDesks(wallet)
         await reconcileExpired(db, signer.publicKey, desks)
-        const used = new Set((await claimsFor(db, desks)).map((r) => r.otc_asset))
+        const claims = await claimsFor(db, desks)
+        const used = new Set(claims.map((r) => r.otc_asset))
+        // Desks held by an unsent order (e.g. cancelled in the wallet): they
+        // come back once the hold ends and the chain shows nothing landed.
+        const holds = claims.filter((r) => r.status === 'pending' && Date.parse(r.expires_at) > Date.now())
         const [sol, tokens] = await Promise.all([
           rpc<{ value: number }>('getBalance', [wallet]),
           paymentMint
@@ -419,11 +536,32 @@ Deno.serve(async (req) => {
         out.wallet = {
           desksHeld: desks.length,
           desksAvailable: desks.filter((d) => !used.has(d)).length,
+          desksOnHold: holds.length,
+          holdUntil: holds.length ? new Date(Math.max(...holds.map((r) => Date.parse(r.expires_at)))).toISOString() : null,
           lamports: sol.value,
           tokenBalance: tokens.value.reduce((a, t) => a + BigInt(t.account.data.parsed.info.tokenAmount.amount), 0n).toString(),
         }
       }
       return json(out, 200, cors)
+    }
+
+    // -------------------------------------------------------------- owned
+    if (body.action === 'owned') {
+      const wallet = parseWallet(body.wallet)
+      const collection = (await fetchCandyMachine(umi, publicKey(OTC_MACHINE!))).collectionMint
+      const ducks: { address: string; name: string; uri: string }[] = []
+      for (let page = 1; page <= 5; page++) {
+        const r = await rpc<{ items: { id: string; burnt: boolean; ownership: { owner: string }; content?: { json_uri?: string; metadata?: { name?: string } } }[] }>(
+          'searchAssets',
+          { ownerAddress: wallet, grouping: ['collection', collection], burnt: false, page, limit: 1000 },
+        )
+        for (const a of r.items) {
+          if (a.burnt || a.ownership.owner !== wallet) continue
+          ducks.push({ address: a.id, name: a.content?.metadata?.name ?? '', uri: a.content?.json_uri ?? '' })
+        }
+        if (r.items.length < 1000) break
+      }
+      return json({ ducks }, 200, cors)
     }
 
     // ------------------------------------------------------------ prepare
@@ -434,18 +572,50 @@ Deno.serve(async (req) => {
       if (otcQuantity + publicQuantity === 0) throw new HttpError(400, 'nothing to mint')
       if (otcQuantity > 0) verifyWalletAuth(umi, wallet, body.auth)
 
-      const { otc, otcOpen, publicPools } = await loadMachines(umi, signer)
+      const { otc, otcOpen, publicPools } = await loadMachines(umi, signer, mintSigner)
       const minter = createNoopSigner(wallet)
+
+      // Eligibility first (clearest error), then price and balance, then reserve.
+      let desks: string[] = []
+      if (otcQuantity > 0) {
+        if (!otcOpen) throw new HttpError(409, 'the OTC holder mint is closed')
+        if (otc.remaining <= 0) throw new HttpError(409, 'the OTC allocation is sold out')
+        desks = await heldDesks(wallet)
+        if (!desks.length) throw new HttpError(403, 'no OTC Desk held by this wallet')
+        await reconcileExpired(db, signer.publicKey, desks)
+        const used = new Set((await claimsFor(db, desks)).map((r) => r.otc_asset))
+        if (desks.every((d) => used.has(d))) throw new HttpError(409, 'no unused OTC Desks left on this wallet')
+      }
+
+      // Price everything in dollars at the live rate before reserving anything.
+      const paymentMint = (otc.payment ?? publicPools[0]?.payment)?.mint
+      if (!paymentMint) throw new HttpError(409, 'the mint is not open')
+      const decimals = (await rpc<{ value: { decimals: number } }>('getTokenSupply', [paymentMint])).value.decimals
+      const quote = quoteFor(await nasduckUsd(db), decimals)
+      // Each mint costs the dollar quote, or the guard's floor if that is higher.
+      const perMint = (m: Machine, kind: 'otc' | 'public') => {
+        const q = kind === 'otc' ? quote.otc : quote.public
+        return q > m.payment!.amount ? q : m.payment!.amount
+      }
+      const topUp = (m: Machine, kind: 'otc' | 'public', count: number) => BigInt(count) * (perMint(m, kind) - m.payment!.amount)
+      const worstCase =
+        (otcQuantity > 0 && otc.payment ? BigInt(otcQuantity) * perMint(otc, 'otc') : 0n) +
+        BigInt(publicQuantity) * publicPools.reduce((max, m) => (perMint(m, 'public') > max ? perMint(m, 'public') : max), 0n)
+      const balances = await rpc<{ value: { account: { data: { parsed: { info: { tokenAmount: { amount: string } } } } } }[] }>('getTokenAccountsByOwner', [
+        wallet,
+        { mint: paymentMint },
+        { encoding: 'jsonParsed' },
+      ])
+      const balance = balances.value.reduce((a, t) => a + BigInt(t.account.data.parsed.info.tokenAmount.amount), 0n)
+      if (balance < worstCase) {
+        const whole = (n: bigint) => (n / 10n ** BigInt(decimals)).toLocaleString('en-US')
+        throw new HttpError(400, `not enough $NASDUCK: this order costs ${whole(worstCase)} at the live price, your wallet has ${whole(balance)}`)
+      }
+
       const { blockhash, lastValidBlockHeight } = await umi.rpc.getLatestBlockhash()
       const transactions: Prepared[] = []
 
       if (otcQuantity > 0) {
-        if (!otcOpen) throw new HttpError(409, 'the OTC holder mint is closed')
-        if (otc.remaining <= 0) throw new HttpError(409, 'the OTC allocation is sold out')
-        const desks = await heldDesks(wallet)
-        if (!desks.length) throw new HttpError(403, 'no OTC Desk held by this wallet')
-        await reconcileExpired(db, signer.publicKey, desks)
-
         let left = Math.min(otcQuantity, otc.remaining)
         while (left > 0) {
           const want = Math.min(MAX_OTC_MINTS_PER_TX, left)
@@ -467,6 +637,8 @@ Deno.serve(async (req) => {
               assets.push(m.asset)
               builder = builder.add(m.builder)
             }
+            const extra = topUp(otc, 'otc', rows.length)
+            if (extra > 0n) builder = builder.add(topUpIx(umi, wallet, otc.payment!, decimals, extra))
             builder = builder
               .add({
                 instruction: {
@@ -479,7 +651,7 @@ Deno.serve(async (req) => {
               })
               .setFeePayer(minter)
               .setBlockhash({ blockhash, lastValidBlockHeight })
-            transactions.push({ kind: 'otc', reservationId, assets, transaction: await finish(umi, builder) })
+            transactions.push({ kind: 'otc', reservationId, assets, cost: (BigInt(rows.length) * perMint(otc, 'otc')).toString(), transaction: await finish(umi, builder) })
           } catch (e) {
             await db.rpc('release_otc_reservation', { p_reservation: reservationId })
             throw e
@@ -499,20 +671,28 @@ Deno.serve(async (req) => {
           while (count > 0) {
             let builder = transactionBuilder().setFeePayer(minter).setBlockhash({ blockhash, lastValidBlockHeight })
             const assets: string[] = []
+            // Leave room for the top-up transfer (same size whatever the amount).
+            const withTopUp = (b: TransactionBuilder) => b.add(topUpIx(umi, wallet, pool.payment!, decimals, 1n))
             while (count > 0) {
-              const m = mintIx(umi, pool, minter)
+              const m = mintIx(umi, pool, minter, mintSigner)
               const next = builder.add(m.builder)
-              if (assets.length > 0 && !next.fitsInOneTransaction(umi)) break
+              if (assets.length > 0 && !withTopUp(next).fitsInOneTransaction(umi)) break
               builder = next
               assets.push(m.asset)
               count--
             }
-            transactions.push({ kind: 'public', assets, transaction: await finish(umi, builder) })
+            const extra = topUp(pool, 'public', assets.length)
+            if (extra > 0n) builder = builder.add(topUpIx(umi, wallet, pool.payment!, decimals, extra))
+            transactions.push({ kind: 'public', assets, cost: (BigInt(assets.length) * perMint(pool, 'public')).toString(), transaction: await finish(umi, builder) })
           }
         }
       }
 
-      return json({ transactions, lastValidBlockHeight }, 200, cors)
+      return json(
+        { transactions, lastValidBlockHeight, quote: { nasduckUsd: quote.nasduckUsd, public: quote.public.toString(), otc: quote.otc.toString(), decimals } },
+        200,
+        cors,
+      )
     }
 
     // ------------------------------------------------------------- submit
@@ -542,7 +722,7 @@ Deno.serve(async (req) => {
         const memo = memoIx ? new TextDecoder().decode(memoIx.data) : ''
         const reservationId = signerKeys.includes(signer.publicKey) ? UUID_RE.exec(memo)?.[1] : undefined
         // New mint assets are the extra signers (not the fee payer, not our signer).
-        const assets = signerKeys.slice(1).filter((k) => k !== signer.publicKey)
+        const assets = signerKeys.slice(1).filter((k) => k !== signer.publicKey && k !== mintSigner.publicKey)
         try {
           const sigBytes = await umi.rpc.sendTransaction(tx, { commitment: 'confirmed' })
           pending.push({ index, signature: base58.deserialize(sigBytes)[0], sigBytes, reservationId, assets })
@@ -589,7 +769,7 @@ Deno.serve(async (req) => {
       }
       // Push the new minted count to every open page without delaying this response.
       if (results.some((r) => r.status === 'confirmed')) {
-        EdgeRuntime.waitUntil(currentStats(db, umi, signer, true).catch(() => {}))
+        EdgeRuntime.waitUntil(currentStats(db, umi, signer, mintSigner, true).catch(() => {}))
       }
       return json({ results }, 200, cors)
     }

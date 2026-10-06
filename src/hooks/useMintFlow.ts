@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useActiveWallet } from './useActiveWallet'
 import { useMarket } from '../providers/MarketProvider'
-import { MINT_LIVE, SUPPLY, USD_PRICE_PER_MINT, fmt, pad, tierColor, tierForRank, type CollectionItem } from '../lib/mint/config'
+import { MINT_LIVE, OTC_USD_PRICE_PER_MINT, SUPPLY, USD_PRICE_PER_MINT, fmt, pad, tierColor, tierForRank, type CollectionItem } from '../lib/mint/config'
 import {
   authMessage,
+  fetchOwned,
   fetchStatus,
   prepareMint,
   readStats,
@@ -17,10 +18,12 @@ import {
 import { fromBase64, toBase58, toBase64 } from '../lib/mint/encoding'
 
 export type GateState = 'idle' | 'reading' | 'granted' | 'failed'
-export type MintStage = 'idle' | 'authorizing' | 'signing' | 'settling'
+export type MintStage = 'idle' | 'preparing' | 'authorizing' | 'signing' | 'settling'
 export type PanelKey = 'rarity' | 'info' | null
 
 export interface MintedDuck {
+  /** On-chain asset address. */
+  address: string
   id: string
   image: string
   frame: string
@@ -88,7 +91,7 @@ async function toMintedDuck(asset: SubmitResult['assets'][number]): Promise<Mint
     value: a.value,
     pct: statItem?.attributes.find((x) => x.trait_type === a.trait_type)?.pct ?? null,
   }))
-  return { id, image: meta?.image ?? statItem?.image ?? '/mint/duck_minted.png', frame: tierColor(tier), rarity: tier, rank, attributes }
+  return { address: asset.address, id, image: meta?.image ?? statItem?.image ?? '/mint/duck_minted.png', frame: tierColor(tier), rarity: tier, rank, attributes }
 }
 
 const isWalletRejection = (e: unknown) => /reject|cancel|denied|declined|closed/i.test(e instanceof Error ? e.message : String(e))
@@ -193,6 +196,37 @@ export function useMintFlow() {
     [walletAddr, applyStatus],
   )
 
+  // "Your Ducks" gallery: every NasDuck the connected wallet holds, loaded on
+  // connect (so it survives refreshes and return visits). Ducks minted in
+  // this visit are added as they confirm; merging by address avoids doubles.
+  useEffect(() => {
+    // A different wallet gets its own gallery, never a mix.
+    setMine([])
+    setSel(0)
+    if (!walletAddr) return
+    let cancelled = false
+    fetchOwned(walletAddr)
+      .then(async ({ ducks }) => {
+        const loaded: MintedDuck[] = []
+        // A few at a time so a big holder doesn't fire hundreds of requests at once.
+        for (let i = 0; i < ducks.length && !cancelled; i += 8) {
+          loaded.push(...(await Promise.all(ducks.slice(i, i + 8).map(toMintedDuck))))
+        }
+        if (cancelled) return
+        loaded.sort((a, b) => b.id.localeCompare(a.id))
+        setMine((current) => {
+          const seen = new Set(current.map((d) => d.address))
+          return [...current, ...loaded.filter((d) => !seen.has(d.address))]
+        })
+      })
+      .catch(() => {
+        // Gallery just stays as-is; minting is unaffected.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [walletAddr])
+
   useEffect(() => {
     setWalletInfo(null)
     if (!walletAddr) return
@@ -203,6 +237,15 @@ export function useMintFlow() {
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [walletAddr, refreshWallet])
+
+  // When desks are on hold, re-check right after the hold ends so they come
+  // back without a reload.
+  const holdUntil = walletInfo?.holdUntil ? Date.parse(walletInfo.holdUntil) : null
+  useEffect(() => {
+    if (!holdUntil) return
+    const t = window.setTimeout(() => refreshWallet(true), Math.max(0, holdUntil - Date.now()) + 3000)
+    return () => window.clearTimeout(t)
+  }, [holdUntil, refreshWallet])
 
   const status: (MintStats & { wallet?: MintStatus['wallet'] }) | null = stats ? { ...stats, wallet: walletInfo ?? undefined } : null
 
@@ -264,7 +307,6 @@ export function useMintFlow() {
   const otcBase = status?.prices.otc ? BigInt(status.prices.otc) : 0n
   const publicPriceTokens = Number(publicBase) / unit
   const otcPriceTokens = Number(otcBase) / unit
-  const usd = (tokens: number) => (market.live && market.price > 0 ? tokens * market.price : null)
 
   const otcAvailable = status?.otcOpen ? Math.min(status.wallet?.desksAvailable ?? 0, status.otcRemaining) : 0
   const publicRemaining = status?.publicRemaining ?? 0
@@ -274,6 +316,8 @@ export function useMintFlow() {
   const otcQty = Math.min(qty, otcAvailable)
   const publicQty = Math.min(qty - otcQty, publicRemaining)
   const totalTokens = otcQty * otcPriceTokens + publicQty * publicPriceTokens
+  // Quoted live in $NASDUCK for exactly these dollar amounts.
+  const totalUsd = status ? otcQty * OTC_USD_PRICE_PER_MINT + publicQty * USD_PRICE_PER_MINT : null
   const needBase = BigInt(otcQty) * otcBase + BigInt(publicQty) * publicBase
   const balanceBase = status?.wallet ? BigInt(status.wallet.tokenBalance) : null
   const lamports = status?.wallet?.lamports ?? null
@@ -293,6 +337,13 @@ export function useMintFlow() {
     }
     if (stage !== 'idle' || !MINT_LIVE || !wallet.signTransactions || !wallet.signMessage) return
     setMintError(null)
+    // Show progress the instant the button is pressed; the checks below and
+    // the wallet popup can take a moment.
+    setStage('preparing')
+    const bail = (message: string) => {
+      setMintError(message)
+      setStage('idle')
+    }
 
     let otcReserved = false
     let latest: MintStatus
@@ -300,7 +351,7 @@ export function useMintFlow() {
       latest = await fetchStatus(walletAddr)
       applyStatus(latest)
     } catch (e) {
-      setMintError(e instanceof Error ? e.message : 'Could not load the latest mint status')
+      bail(e instanceof Error ? e.message : 'Could not load the latest mint status')
       return
     }
 
@@ -308,7 +359,7 @@ export function useMintFlow() {
     const wantOtc = Math.min(qty, otcAvail)
     const wantPublic = qty - wantOtc
     if (wantPublic > latest.publicRemaining) {
-      setMintError(`Only ${fmt(latest.publicRemaining + otcAvail)} available for this wallet right now.`)
+      bail(`Only ${fmt(latest.publicRemaining + otcAvail)} available for this wallet right now.`)
       return
     }
     const pubBase = latest.prices.public ? BigInt(latest.prices.public) : 0n
@@ -316,17 +367,19 @@ export function useMintFlow() {
     const unitL = 10 ** (latest.prices.decimals ?? 6)
     const need = BigInt(wantOtc) * otcB + BigInt(wantPublic) * pubBase
     if (latest.wallet && BigInt(latest.wallet.tokenBalance) < need) {
-      setMintError(`Not enough $NASDUCK: this order needs ${fmt(Math.ceil(Number(need) / unitL))}, your wallet has ${fmt(Math.floor(Number(BigInt(latest.wallet.tokenBalance)) / unitL))}.`)
+      bail(`Not enough $NASDUCK: this order needs ${fmt(Math.ceil(Number(need) / unitL))}, your wallet has ${fmt(Math.floor(Number(BigInt(latest.wallet.tokenBalance)) / unitL))}.`)
       return
     }
     if (latest.wallet && latest.wallet.lamports < qty * LAMPORTS_PER_DUCK_ESTIMATE) {
-      setMintError(`Not enough SOL for network fees: keep about ${((qty * LAMPORTS_PER_DUCK_ESTIMATE) / 1e9).toFixed(3)} SOL in your wallet for this order.`)
+      bail(`Not enough SOL for network fees: keep about ${((qty * LAMPORTS_PER_DUCK_ESTIMATE) / 1e9).toFixed(3)} SOL in your wallet for this order.`)
       return
     }
 
     const minted: SubmitResult['assets'] = []
     let otcCount = 0
     let publicCount = 0
+    let otcCost = 0n
+    let publicCost = 0n
     const failures: string[] = []
 
     try {
@@ -351,9 +404,10 @@ export function useMintFlow() {
         if (batches > 1) setProgress(`BATCH ${b} OF ${batches}`)
         const o = Math.min(otcLeft, MAX_PER_TIER_PER_BATCH)
         const p = Math.min(pubLeft, MAX_PER_TIER_PER_BATCH)
-        setStage('signing')
+        setStage('preparing')
         const prep = await prepareMint(walletAddr, o, p, o > 0 ? auth : undefined)
         otcReserved = prep.transactions.some((t) => t.kind === 'otc')
+        setStage('signing')
         const signed = await wallet.signTransactions(
           prep.transactions.map((t) => fromBase64(t.transaction)),
           latest.cluster,
@@ -364,8 +418,13 @@ export function useMintFlow() {
         results.forEach((r, i) => {
           if (r.status === 'confirmed') {
             minted.push(...r.assets)
-            if (prep.transactions[i].kind === 'otc') otcCount += r.assets.length
-            else publicCount += r.assets.length
+            if (prep.transactions[i].kind === 'otc') {
+              otcCount += r.assets.length
+              otcCost += BigInt(prep.transactions[i].cost)
+            } else {
+              publicCount += r.assets.length
+              publicCost += BigInt(prep.transactions[i].cost)
+            }
           } else {
             failures.push(r.reason ?? 'transaction failed')
           }
@@ -383,7 +442,7 @@ export function useMintFlow() {
       if (isWalletRejection(e)) {
         failures.push(
           otcReserved
-            ? 'Cancelled in your wallet, nothing was charged. Your OTC Desk discount unlocks again in about 3 minutes.'
+            ? 'Cancelled in your wallet, nothing was charged. Your OTC Desk discounts are on hold for a moment and come back automatically.'
             : 'Cancelled in your wallet, nothing was charged.',
         )
       } else {
@@ -393,16 +452,16 @@ export function useMintFlow() {
 
     if (minted.length) {
       const ducks = await Promise.all(minted.map(toMintedDuck))
-      setMine((m) => [...ducks.slice().reverse(), ...m])
+      setMine((m) => [...ducks.slice().reverse(), ...m.filter((d) => !ducks.some((x) => x.address === d.address))])
       setSel(0)
       setReceipt({
         items: ducks,
         qty: ducks.length,
-        total: Math.round(otcCount * (Number(otcB) / unitL) + publicCount * (Number(pubBase) / unitL)),
+        total: Math.round(Number(otcCost + publicCost) / unitL),
         otcCount,
-        otcEach: Number(otcB) / unitL,
+        otcEach: otcCount ? Math.round(Number(otcCost) / unitL / otcCount) : 0,
         publicCount,
-        publicEach: Number(pubBase) / unitL,
+        publicEach: publicCount ? Math.round(Number(publicCost) / unitL / publicCount) : 0,
       })
     }
     if (failures.length) {
@@ -419,6 +478,7 @@ export function useMintFlow() {
   const dec = useCallback(() => setQty((q) => Math.max(1, q - 1)), [])
   const inc = useCallback(() => setQty((q) => Math.min(ceiling, q + 1)), [ceiling])
   const setMaxQty = useCallback(() => setQty(ceiling), [ceiling])
+  const resetQty = useCallback(() => setQty(1), [])
   // Lets the qty box be typed into directly; clamps to [1, what's available].
   const setQtyCustom = useCallback(
     (raw: number) => {
@@ -449,17 +509,19 @@ export function useMintFlow() {
     remainingStr: fmt(Math.max(0, supply - mintedCount)),
     mintedPct: ((mintedCount / Math.max(1, supply)) * 100).toFixed(1) + '%',
     publicPriceTokens,
-    publicPriceUsd: usd(publicPriceTokens),
+    publicPriceUsd: publicPriceTokens > 0 ? USD_PRICE_PER_MINT : null,
     otcOpen: status?.otcOpen ?? false,
     otcAvailable,
     desksHeld: status?.wallet?.desksHeld ?? 0,
+    desksOnHold: status?.wallet?.desksOnHold ?? 0,
+    holdUntil,
     otcPriceTokens,
-    otcPriceUsd: usd(otcPriceTokens),
+    otcPriceUsd: otcPriceTokens > 0 ? OTC_USD_PRICE_PER_MINT : null,
     otcQty,
     publicQty,
     totalTokens,
     totalTokensStr: fmtTokens(totalTokens),
-    totalUsd: usd(totalTokens),
+    totalUsd,
     balanceLabel: status?.wallet
       ? `${(status.wallet.lamports / 1e9).toFixed(3)} SOL · ${fmtTokens(Number(BigInt(status.wallet.tokenBalance)) / unit)} $NASDUCK`
       : '— SOL · — $NASDUCK',
@@ -477,6 +539,7 @@ export function useMintFlow() {
     dec,
     inc,
     setMaxQty,
+    resetQty,
     setQtyCustom,
     closeReceipt,
     togglePanel,

@@ -22,12 +22,13 @@ import { fetchCandyGuard, fetchCandyMachine, mintV1, mplCandyMachine } from '@me
 const RPC = 'https://api.devnet.solana.com'
 const DEVNET_GENESIS = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG'
 const MEMO_PROGRAM = publicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr')
-const METADATA_BASE = 'https://gateway.irys.xyz/6pZkoSyYyDvLxSej4oPGkPogtDyMi4FHTyw3wsn7V2yB/'
 const ONE_OF_ONES = [5550, 5551, 5552, 5553, 5554]
 const TOKEN = 10n ** 6n
 
 const fx = JSON.parse(readFileSync('output/devnet-fixtures.json', 'utf-8'))
 const rh = JSON.parse(readFileSync('output/devnet-rehearsal.json', 'utf-8'))
+// The first rehearsal (no metadataBase recorded) used the pre-rename upload.
+const METADATA_BASE: string = rh.metadataBase ?? 'https://gateway.irys.xyz/6pZkoSyYyDvLxSej4oPGkPogtDyMi4FHTyw3wsn7V2yB/'
 const connection = new Connection(RPC, 'confirmed')
 
 let pass = 0
@@ -79,8 +80,8 @@ async function main() {
   const uriNum = (uri: string) => Number(uri.replace(METADATA_BASE, '').replace('.json', ''))
   const otcNums = otcCm.items.map((i) => uriNum(i.uri))
   const pubNums = pubCm.items.map((i) => uriNum(i.uri))
-  check('OTC machine has 10 items loaded', otcCm.itemsLoaded === 10 && Number(otcCm.data.itemsAvailable) === 10)
-  check('public machine has 10 items loaded', pubCm.itemsLoaded === 10 && Number(pubCm.data.itemsAvailable) === 10)
+  check(`OTC machine has all ${rh.otcItems.length} items loaded`, otcCm.itemsLoaded === rh.otcItems.length && Number(otcCm.data.itemsAvailable) === rh.otcItems.length)
+  check(`public machine has all ${rh.publicItems.length} items loaded`, pubCm.itemsLoaded === rh.publicItems.length && Number(pubCm.data.itemsAvailable) === rh.publicItems.length)
   check('OTC machine contains no 1-of-1s', otcNums.every((n) => !ONE_OF_ONES.includes(n)))
   check('public machine contains all five 1-of-1s', ONE_OF_ONES.every((n) => pubNums.includes(n)))
 
@@ -90,28 +91,31 @@ async function main() {
   const otcTps = g(otcGuard).thirdPartySigner
   const otcPay = g(otcGuard).token2022Payment
   const pubPay = g(pubGuard).token2022Payment
-  check('OTC guard requires the backend signer', otcTps.__option === 'Some' && otcTps.value.signerKey === rh.otcSigner)
-  check('OTC guard charges 2,000 test $NASDUCK to treasury', otcPay.__option === 'Some' && otcPay.value.amount === 2_000n * TOKEN && otcPay.value.mint === fx.testNasduckMint && otcPay.value.destinationAta === fx.tokenAccounts.treasury)
-  check('public guard charges 5,000 test $NASDUCK to treasury', pubPay.__option === 'Some' && pubPay.value.amount === 5_000n * TOKEN && pubPay.value.destinationAta === fx.tokenAccounts.treasury)
-  check('public guard does NOT require the backend signer', g(pubGuard).thirdPartySigner.__option === 'None')
+  const FLOOR = BigInt(rh.floorTokens) * TOKEN
+  const pubTps = g(pubGuard).thirdPartySigner
+  check('OTC guard requires the OTC backend signer', otcTps.__option === 'Some' && otcTps.value.signerKey === rh.otcSigner)
+  check('public guard requires the mint backend signer', pubTps.__option === 'Some' && pubTps.value.signerKey === rh.mintSigner)
+  check('both guards charge the floor in test $NASDUCK to treasury (backend tops up to the live $ price)', [otcPay, pubPay].every((p) => p.__option === 'Some' && p.value.amount === FLOOR && p.value.mint === fx.testNasduckMint && p.value.destinationAta === fx.tokenAccounts.treasury))
 
-  // --- 2. Public mint by a wallet with no OTC Desks ---------------------
+  // --- 2. Minting straight from the public machine (skipping the backend) --
   {
     const { umi } = walletUmi('.keys/devnet-test-nonHolder.json')
-    const before = { me: await balance(fx.tokenAccounts.nonHolder), treasury: await balance(fx.tokenAccounts.treasury) }
-    const asset = generateSigner(umi)
-    await mintV1(umi, {
-      candyMachine: publicKey(rh.publicMachine),
-      asset,
-      collection: publicKey(rh.collection),
-      mintArgs: { token2022Payment: some({ mint: publicKey(fx.testNasduckMint), destinationAta: publicKey(fx.tokenAccounts.treasury) }) },
-    }).sendAndConfirm(umi)
-    const after = { me: await balance(fx.tokenAccounts.nonHolder), treasury: await balance(fx.tokenAccounts.treasury) }
-    const a = await fetchAsset(umi, asset.publicKey)
-    check('public $5-tier mint succeeds for anyone', true)
-    check('public mint charged exactly 5,000 and treasury received exactly 5,000', before.me - after.me === 5_000n * TOKEN && after.treasury - before.treasury === 5_000n * TOKEN)
-    check('public-minted duck has real metadata (instant reveal) and is owned by the minter', a.name === `NasDucks #${uriNum(a.uri)}` && a.uri.startsWith(METADATA_BASE) && a.owner === fx.wallets.nonHolder, `${a.name}`)
-    check('public-minted duck is in the NasDucks collection', a.updateAuthority.type === 'Collection' && a.updateAuthority.address === rh.collection)
+    const before = await balance(fx.tokenAccounts.nonHolder)
+    let rejected = false
+    let reason = ''
+    try {
+      await mintV1(umi, {
+        candyMachine: publicKey(rh.publicMachine),
+        asset: generateSigner(umi),
+        collection: publicKey(rh.collection),
+        mintArgs: { token2022Payment: some({ mint: publicKey(fx.testNasduckMint), destinationAta: publicKey(fx.tokenAccounts.treasury) }) },
+      }).sendAndConfirm(umi)
+    } catch (e) {
+      rejected = true
+      reason = String((e as Error).message).split('\n')[0].slice(0, 120)
+    }
+    check('a public mint that skips the backend (and its live price) is rejected', rejected, reason)
+    check('rejected attempt charged nothing', (await balance(fx.tokenAccounts.nonHolder)) === before)
   }
 
   // --- 3. OTC mint with a FORGED signer must be rejected on-chain --------
@@ -142,8 +146,8 @@ async function main() {
     const { signature } = await builder.sendAndConfirm(umi)
     const after = { me: await balance(fx.tokenAccounts.holderA), treasury: await balance(fx.tokenAccounts.treasury) }
     const a = await fetchAsset(umi, asset.publicKey)
-    check('OTC $2-tier mint succeeds with the backend signature', true, `${size} bytes of 1232`)
-    check('OTC mint charged exactly 2,000 and treasury received exactly 2,000', before.me - after.me === 2_000n * TOKEN && after.treasury - before.treasury === 2_000n * TOKEN)
+    check('OTC mint succeeds with the backend signature', true, `${size} bytes of 1232`)
+    check('without a top-up the guard alone charges just the floor (the backend always adds the rest)', before.me - after.me === FLOOR && after.treasury - before.treasury === FLOOR)
     check('OTC-minted duck is a regular duck from the OTC pool, owned by the minter', otcNums.includes(uriNum(a.uri)) && a.owner === fx.wallets.holderA, a.name)
 
     // The backend's confirmation path: find our tx via the signer's history and read its memo.

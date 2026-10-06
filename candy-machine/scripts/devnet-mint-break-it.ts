@@ -6,6 +6,7 @@
 //   - mint that landed but was never submitted/confirmed gets auto-confirmed
 //   - passing a used desk to another wallet earns no second discount
 //   - simultaneous requests can't double-reserve the same desk
+//   - lowering the live price inside a signed transaction is rejected
 //   - flipping the machine to public shuts the $2 path, and back restores it
 // Creates its own fresh test desks, so it doesn't depend on earlier runs.
 // Needs at least 3 ducks left in the devnet OTC machine. Takes ~4 minutes.
@@ -16,7 +17,7 @@ import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
 import { create, fetchAsset, fetchCollection, mplCore, transfer } from '@metaplex-foundation/mpl-core'
 import { mintV1, mplCandyMachine } from '@metaplex-foundation/mpl-core-candy-machine'
 import 'dotenv/config'
-import { flipOtcMachine } from './otc-flip'
+import { setMachineSigner } from './otc-flip'
 import { getUmi } from './_shared'
 
 const SUPABASE_URL = 'https://qrqenowwwccmfgwsnfpa.supabase.co'
@@ -151,6 +152,29 @@ async function main() {
   }
   // The original is deliberately never sent: that reservation is abandoned.
 
+  // --- 1b. Paying less than the live price -----------------------------------
+  {
+    const p = await call({ action: 'prepare', wallet: fx.wallets.nonHolder, otcQuantity: 0, publicQuantity: 1 })
+    const tx = nonHolder.transactions.deserialize(base64.serialize(p.body.transactions[0].transaction))
+    // Find the top-up TransferChecked (Token-2022, discriminator 12) and cut its amount to 1.
+    const ix = tx.message.instructions.find((i) => String(tx.message.accounts[i.programIndex]) === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb' && i.data[0] === 12)
+    check('every public mint carries a live-price top-up transfer', !!ix)
+    if (ix) {
+      const cheap = { ...tx.message, instructions: tx.message.instructions.map((i) => (i === ix ? { ...i, data: Uint8Array.from([12, 1, 0, 0, 0, 0, 0, 0, 0, i.data[9]]) } : i)) }
+      let rejected = false
+      let reason = ''
+      try {
+        const reserialized = nonHolder.transactions.serializeMessage(cheap)
+        const signed = await nonHolder.identity.signTransaction({ ...tx, message: cheap, serializedMessage: reserialized })
+        await nonHolder.rpc.sendTransaction(signed)
+      } catch (e) {
+        rejected = true
+        reason = String((e as Error).message).split('\n')[0].slice(0, 100)
+      }
+      check('a transaction with the price lowered is rejected (backend signature no longer matches)', rejected, reason)
+    }
+  }
+
   // --- 2. Mint that lands but the backend never hears about (holderB) --------
   const pB = await prepareOtc(holderB, 1)
   check('holderB reserves one desk', pB.status === 200 && pB.body.transactions?.length === 1, `HTTP ${pB.status}`)
@@ -210,23 +234,31 @@ async function main() {
 
   // --- 5. Flip the OTC machine to public, then back --------------------------
   {
-    await flipOtcMachine(authority, { machine: rh.otcMachine, to: 'public', amount: 5_000n * TOKEN, apply: true })
+    await setMachineSigner(authority, { machine: rh.otcMachine, signer: rh.mintSigner, floor: BigInt(rh.floorTokens) * TOKEN, apply: true })
     await sleep(12_000) // let the backend's ~10s status cache expire
     check('after flipping to public, the backend reports the OTC mint as closed', (await walletStatus(fx.wallets.holderA)).otcOpen === false)
     const pF = await prepareOtc(holderA, 1)
     check('...and refuses to prepare $2 mints', pF.status === 409, `HTTP ${pF.status} ${pF.body.error ?? ''}`)
 
-    const asset = generateSigner(nonHolder)
-    await mintV1(nonHolder, {
-      candyMachine: publicKey(rh.otcMachine),
-      asset,
-      collection: publicKey(rh.collection),
-      mintArgs: { token2022Payment: some({ mint: publicKey(fx.testNasduckMint), destinationAta: publicKey(fx.tokenAccounts.treasury) }) },
-    }).sendAndConfirm(nonHolder)
-    const minted = await fetchAsset(nonHolder, asset.publicKey)
-    check('anyone can now mint the OTC leftovers at the public price, no approval needed', rh.otcItems.includes(Number(minted.name.split('#')[1])), minted.name)
+    let rejected = false
+    try {
+      await mintV1(nonHolder, {
+        candyMachine: publicKey(rh.otcMachine),
+        asset: generateSigner(nonHolder),
+        collection: publicKey(rh.collection),
+        mintArgs: { token2022Payment: some({ mint: publicKey(fx.testNasduckMint), destinationAta: publicKey(fx.tokenAccounts.treasury) }) },
+      }).sendAndConfirm(nonHolder)
+    } catch {
+      rejected = true
+    }
+    check('...and minting its leftovers while skipping the backend is still rejected', rejected)
+    const pub = await call({ action: 'prepare', wallet: fx.wallets.nonHolder, otcQuantity: 0, publicQuantity: 30 })
+    const usesOtc = (pub.body.transactions ?? []).some((t: { transaction: string }) =>
+      nonHolder.transactions.deserialize(base64.serialize(t.transaction)).message.accounts.map(String).includes(rh.otcMachine),
+    )
+    check('the backend now sells OTC leftovers at the $5 quote (nothing sent)', pub.status === 200 && usesOtc, `HTTP ${pub.status}`)
 
-    await flipOtcMachine(authority, { machine: rh.otcMachine, to: 'otc', amount: 2_000n * TOKEN, signer: rh.otcSigner, apply: true })
+    await setMachineSigner(authority, { machine: rh.otcMachine, signer: rh.otcSigner, floor: BigInt(rh.floorTokens) * TOKEN, apply: true })
     await sleep(12_000) // let the backend's ~10s status cache expire
     check('flipping back to OTC re-opens the holder mint', (await walletStatus(fx.wallets.holderA)).otcOpen === true)
   }

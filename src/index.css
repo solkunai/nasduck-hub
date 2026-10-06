@@ -15,3 +15,26 @@
     color: #081428;
   }
 }
+
+@layer components {
+  /* Mint progress bars: diagonal orange stripes that slowly slide, with a
+     shine on top (same tiling as a classic striped progress bar, so it loops
+     seamlessly at any width). */
+  .mint-progress-fill {
+    background-color: #ff9f2e;
+    background-image:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0 30%, transparent 30% 72%, rgba(0, 0, 0, 0.18) 72%),
+      linear-gradient(45deg, rgba(150, 60, 0, 0.55) 25%, transparent 25% 50%, rgba(150, 60, 0, 0.55) 50% 75%, transparent 75%);
+    background-size: 100% 100%, 24px 24px;
+    background-repeat: no-repeat, repeat;
+    filter: drop-shadow(0 0 5px #f5911e);
+    animation: mintStripes 1.4s linear infinite;
+  }
+  @keyframes mintStripes {
+    from { background-position: 0 0, 0 0; }
+    to { background-position: 0 0, 24px 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mint-progress-fill { animation: none; }
+  }
+}

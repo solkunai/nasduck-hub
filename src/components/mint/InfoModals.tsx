@@ -44,7 +44,7 @@ export function RarityModal({ onClose }: { onClose: () => void }) {
         ))}
       </div>
       <p className="mt-4 font-terminal text-[16px] text-[#3B2F1E]/80">
-        5 true 1-of-1s are hiding in the mint — Alien Duck, Blacistheneworange, Duck Ghost, Ducky Wonka, and Pepe Duck. The rarest ranks in the whole collection.
+        5 true 1-of-1s are hiding in the mint — Alien Duck, Black Is The New Orange, Duck Ghost, Ducky Wonka, and Pepe Duck. The rarest ranks in the whole collection.
       </p>
     </ModalShell>
   )

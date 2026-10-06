@@ -12,12 +12,17 @@ export const SUPPLY = 5555
 // nasducks-mint function); the USD shown at checkout is that amount at the
 // current market price.
 export const USD_PRICE_PER_MINT = 5
+// OTC Desk holder price. Both are charged in $NASDUCK at the live rate
+// (the backend quotes every mint), so buyers always pay these dollar amounts.
+export const OTC_USD_PRICE_PER_MINT = 2
 
+// Mint fund distribution (kept for reference, hidden from the page for now):
+//   50% LP, 25% community (airdrops, giveaways), 25% marketing/dev/artist.
+//
 // Shared between the desktop full-width strip (Mint.tsx) and the mobile
 // bottom sheet (FloorPass.tsx) — same four facts, different container.
 export const MINT_DETAILS = [
   ['SUPPLY', '5,555 total. No ducks held back — every one is mintable.'],
-  ['MINT FUNDS', '50% LP, 25% community (airdrops, giveaways), 25% marketing/dev/artist.'],
   ['ROYALTIES', '5% on secondary, routed to the $NASDUCK community wallet.'],
   ['REVEAL', 'Instant. You see your duck the moment the transaction settles.'],
   ['VERIFY', 'Only mint from this page. Check the URL twice. Then once more.'],
@@ -42,7 +47,7 @@ export const FINE_PRINT_ITEMS = [
 export const REAL_RARITY = [
   { tier: 'COMMON', count: 3430, pct: '62%', color: '#C9D3E3' },
   { tier: 'UNCOMMON', count: 1500, pct: '27%', color: '#F7E7C1' },
-  { tier: 'RARE', count: 500, pct: '9%', color: '#6FBE44' },
+  { tier: 'RARE', count: 500, pct: '9%', color: '#F5911E' },
   { tier: 'LEGENDARY', count: 125, pct: '2%', color: '#FFC522' },
 ] as const
 
@@ -78,7 +83,7 @@ const MINT_SITE_URL = 'https://nasduck.wtf/mint'
 // `id` is always the real minted duck's number (e.g. the actual `latest.id` /
 // `current.id` from useMintFlow's mint state) — never a placeholder.
 export function buildFlexTweet(id: string): string {
-  return `Just got my badge punched on the @NASDUCKOTC trading floor. NasDuck ${id} | Fired from Wall Street, hired by degens. 🦆📈\n\n${MINT_SITE_URL}`
+  return `Just got my badge punched on the @NASDUCKOTC trading floor.\n\nNasDuck ${id} | Fired from Wall Street, hired by degens. 🦆📈\n\n${MINT_SITE_URL}`
 }
 
 export function fmt(n: number): string {

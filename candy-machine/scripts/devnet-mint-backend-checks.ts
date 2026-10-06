@@ -9,7 +9,7 @@ import { base58, base64 } from '@metaplex-foundation/umi/serializers'
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults'
 import { create, fetchCollection, mplCore } from '@metaplex-foundation/mpl-core'
 import { mplCandyMachine } from '@metaplex-foundation/mpl-core-candy-machine'
-import { flipOtcMachine } from './otc-flip'
+import { setMachineSigner } from './otc-flip'
 import { getUmi } from './_shared'
 
 const SUPABASE_URL = 'https://qrqenowwwccmfgwsnfpa.supabase.co'
@@ -69,7 +69,8 @@ async function main() {
   const nonHolder = wallet('nonHolder')
   const authority = getUmi()
 
-  // Two fresh test desks for holderB (all earlier test desks are used up).
+  // Two fresh test desks for holderB (on top of whatever it already has).
+  const before0 = (await call({ action: 'status', wallet: fx.wallets.holderB })).body.wallet
   const coll = await fetchCollection(authority, publicKey(fx.otcDeskCollection))
   for (let i = 0; i < 2; i++) {
     await create(authority, { asset: generateSigner(authority), collection: coll, name: 'TEST OTC Desk (extra)', uri: 'https://nasduck.wtf', owner: publicKey(fx.wallets.holderB) }).sendAndConfirm(authority)
@@ -78,10 +79,12 @@ async function main() {
 
   // --- status --------------------------------------------------------------
   const s0 = await call({ action: 'status' })
-  check('status works without a wallet', s0.status === 200 && s0.body.supply === 20, JSON.stringify(s0.body))
-  check('status reports real on-chain prices', s0.body.prices?.public === String(5_000n * TOKEN) && s0.body.prices?.otc === String(2_000n * TOKEN) && s0.body.prices?.decimals === 6)
+  check('status works without a wallet', s0.status === 200 && s0.body.supply === rh.otcItems.length + rh.publicItems.length, JSON.stringify(s0.body))
+  const jup = Number((await (await fetch('https://lite-api.jup.ag/price/v3?ids=7Y7V1a4m2nWK7BMgbka5B4vR1pDvCK7yva3Hnrqkraze')).json())['7Y7V1a4m2nWK7BMgbka5B4vR1pDvCK7yva3Hnrqkraze'].usdPrice)
+  const usdOf = (base: string) => (Number(base) / 1e6) * jup
+  check('status quotes $5 and $2 at the live $NASDUCK price (within 10%)', Math.abs(usdOf(s0.body.prices?.public) - 5) < 0.5 && Math.abs(usdOf(s0.body.prices?.otc) - 2) < 0.2, `$${usdOf(s0.body.prices?.public).toFixed(2)} / $${usdOf(s0.body.prices?.otc).toFixed(2)}`)
   const s1 = await call({ action: 'status', wallet: fx.wallets.holderB })
-  check('status with wallet: 3 desks held, 2 unused, real token balance', s1.body.wallet?.desksHeld === 3 && s1.body.wallet?.desksAvailable === 2 && BigInt(s1.body.wallet.tokenBalance) === (await tokenBalance(fx.tokenAccounts.holderB)), JSON.stringify(s1.body.wallet))
+  check('status with wallet: 2 more desks held and unused, real token balance', s1.body.wallet?.desksHeld === before0.desksHeld + 2 && s1.body.wallet?.desksAvailable === before0.desksAvailable + 2 && BigInt(s1.body.wallet.tokenBalance) === (await tokenBalance(fx.tokenAccounts.holderB)), JSON.stringify(s1.body.wallet))
 
   // --- combined order: 2 at OTC price + 2 at public price ----------------
   {
@@ -97,10 +100,12 @@ async function main() {
       const otcDucks = results.filter((_: unknown, i: number) => p.body.transactions[i].kind === 'otc').flatMap((r: { assets: { name: string }[] }) => r.assets.map((a) => num(a.name)))
       check('OTC-priced ducks came from the OTC pool (never a 1-of-1)', otcDucks.length === 2 && otcDucks.every((n: number) => rh.otcItems.includes(n)), otcDucks.join(','))
       const after = { me: await tokenBalance(fx.tokenAccounts.holderB), treasury: await tokenBalance(fx.tokenAccounts.treasury) }
-      const expected = 2n * 2_000n * TOKEN + 2n * 5_000n * TOKEN
-      check('charged exactly 2×$2-tier + 2×$5-tier, all to treasury', before.me - after.me === expected && after.treasury - before.treasury === expected)
+      const expected = (p.body.transactions as { cost: string }[]).reduce((a, t) => a + BigInt(t.cost), 0n)
+      const q = p.body.quote
+      check('quote is 2×$2 + 2×$5 at the live price', expected === 2n * BigInt(q.otc) + 2n * BigInt(q.public), `${Number(expected) / 1e6} tokens`)
+      check('charged exactly the quoted amount, all to treasury', before.me - after.me === expected && after.treasury - before.treasury === expected)
       const s2 = await call({ action: 'status', wallet: fx.wallets.holderB })
-      check('submit recorded the OTC claims (0 unused desks left)', s2.body.wallet?.desksAvailable === 0)
+      check('submit recorded the OTC claims (both new desks now used)', s2.body.wallet?.desksAvailable === before0.desksAvailable)
     }
   }
 
@@ -131,14 +136,16 @@ async function main() {
 
   // --- after the flip: public mints draw from both pools ------------------
   {
-    await flipOtcMachine(authority, { machine: rh.otcMachine, to: 'public', amount: 5_000n * TOKEN, apply: true })
+    await setMachineSigner(authority, { machine: rh.otcMachine, signer: rh.mintSigner, floor: BigInt(rh.floorTokens) * TOKEN, apply: true })
+    await sleep(12_000) // let the backend's ~10s status cache expire
     const s = await call({ action: 'status' })
     check('after flip: OTC closed, its leftovers counted in public supply', s.body.otcOpen === false && s.body.publicRemaining > 0, JSON.stringify({ otcOpen: s.body.otcOpen, publicRemaining: s.body.publicRemaining }))
-    const p = await call({ action: 'prepare', wallet: fx.wallets.nonHolder, publicQuantity: s.body.publicRemaining })
+    const p = await call({ action: 'prepare', wallet: fx.wallets.nonHolder, publicQuantity: Math.min(30, s.body.publicRemaining) })
     const fromOtc = (p.body.transactions ?? []).some((t: { transaction: string }) => base64.serialize(t.transaction) && t.transaction.length > 0 && nonHolder.transactions.deserialize(base64.serialize(t.transaction)).message.accounts.includes(publicKey(rh.otcMachine)))
     const fromPub = (p.body.transactions ?? []).some((t: { transaction: string }) => nonHolder.transactions.deserialize(base64.serialize(t.transaction)).message.accounts.includes(publicKey(rh.publicMachine)))
     check('buying out the rest draws from BOTH pools after the flip (nothing sent)', p.status === 200 && fromOtc && fromPub)
-    await flipOtcMachine(authority, { machine: rh.otcMachine, to: 'otc', amount: 2_000n * TOKEN, signer: rh.otcSigner, apply: true })
+    await setMachineSigner(authority, { machine: rh.otcMachine, signer: rh.otcSigner, floor: BigInt(rh.floorTokens) * TOKEN, apply: true })
+    await sleep(12_000)
     check('flipped back: OTC open again', (await call({ action: 'status' })).body.otcOpen === true)
   }
 

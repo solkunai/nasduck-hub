@@ -9,7 +9,8 @@
     "collection:create": "tsx scripts/create-collection.ts",
     "candy-machine:create": "tsx scripts/create-candy-machine.ts",
     "items:insert-test": "tsx scripts/insert-test-items.ts",
-    "mint:test": "tsx scripts/test-mint.ts"
+    "mint:test": "tsx scripts/test-mint.ts",
+    "admin": "vite --config admin/vite.config.ts"
   },
   "dependencies": {
     "@irys/sdk": "^0.2.11",
@@ -24,8 +25,11 @@
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
+    "@metaplex-foundation/umi-signer-wallet-adapters": "1.6.0",
     "@types/node": "^24.13.3",
+    "buffer": "6.0.3",
     "tsx": "^4.19.2",
-    "typescript": "~5.6.0"
+    "typescript": "~5.6.0",
+    "vite": "8.2.2"
   }
 }

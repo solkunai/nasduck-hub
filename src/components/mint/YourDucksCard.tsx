@@ -1,14 +1,18 @@
 import type { MintedDuck } from '../../hooks/useMintFlow'
+import { DuckStrip } from './DuckStrip'
 import { buildFlexTweet } from '../../lib/mint/config'
 import { openTweetIntent } from '../../lib/share'
+import { PixelXLogo } from './PixelXLogo'
 
 interface YourDucksCardProps {
   mine: MintedDuck[]
   sel: number
   onSelect: (i: number) => void
+  /** Opens the full card (traits etc.) for a duck. */
+  onOpen: (i: number) => void
 }
 
-export function YourDucksCard({ mine, sel, onSelect }: YourDucksCardProps) {
+export function YourDucksCard({ mine, sel, onSelect, onOpen }: YourDucksCardProps) {
   const hasDucks = mine.length > 0
   const latest = mine[sel]
 
@@ -43,7 +47,12 @@ export function YourDucksCard({ mine, sel, onSelect }: YourDucksCardProps) {
         </div>
       ) : (
         <div className="flex flex-1 flex-col">
-          <div className="relative aspect-square w-full overflow-hidden border-2 border-[#02060E]">
+          <button
+            type="button"
+            onClick={() => onOpen(sel)}
+            aria-label={`View NASDUCK ${latest.id} traits`}
+            className="relative block aspect-square w-full cursor-pointer overflow-hidden border-2 border-[#02060E]"
+          >
             <img src={latest.image} alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
             <div className="absolute left-2 top-2 bg-[#F7E7C1] px-2 py-1 font-pixelify text-[13px] text-[#081428] [box-shadow:2px_2px_0_#02060E]">
               NASDUCK {latest.id}
@@ -54,35 +63,31 @@ export function YourDucksCard({ mine, sel, onSelect }: YourDucksCardProps) {
             >
               {latest.rarity}
             </div>
-            <div className="absolute bottom-2 left-2 bg-[#02060E]/85 px-2 py-1 font-terminal text-[13px] text-[#6FBE44]">▲ JUST LISTED</div>
-          </div>
+            <div className="absolute bottom-2 left-2 bg-[#02060E]/85 px-2 py-1 font-terminal text-[13px] text-[#F5911E]">▲ JUST LISTED</div>
+            <div className="absolute bottom-2 right-2 bg-[#02060E]/85 px-2 py-1 font-terminal text-[13px] text-[#F7E7C1]">TAP FOR TRAITS</div>
+          </button>
 
           {mine.length > 1 && (
-            <div className="mt-2 grid grid-cols-4 gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(84px,1fr))' }}>
-              {mine.map((d, i) => (
-                <button
-                  key={d.id + i}
-                  type="button"
-                  onClick={() => onSelect(i)}
-                  className="aspect-square overflow-hidden border-2"
-                  style={{ borderColor: i === sel ? '#F5911E' : '#3A4A66' }}
-                >
-                  <img src={d.image} alt="" className="h-full w-full object-cover [image-rendering:pixelated]" />
-                </button>
-              ))}
+            <div className="mt-2">
+              <DuckStrip
+                ducks={mine}
+                selected={sel}
+                onPick={(i) => {
+                  onSelect(i)
+                  onOpen(i)
+                }}
+              />
             </div>
           )}
 
           <div className="mt-3 flex gap-2">
-            <button type="button" className="flex-1 bg-[#02060E] py-2 font-terminal text-[14px] text-[#F7E7C1]">
-              VIEW ON TENSOR ↗
-            </button>
             <button
               type="button"
+              aria-label="Flex on X"
               onClick={() => openTweetIntent(buildFlexTweet(latest.id))}
-              className="flex-1 bg-[#6FBE44] py-2 font-terminal text-[14px] text-[#02060E]"
+              className="flex-1 bg-[#F5911E] py-3 font-pixelify text-[clamp(20px,2.2vw,24px)] font-bold tracking-[.06em] text-[#02060E] [box-shadow:0_4px_0_#02060E] active:translate-y-[3px] active:[box-shadow:0_1px_0_#02060E]"
             >
-              FLEX ON X ↗
+              <span className="inline-flex items-center justify-center gap-2">FLEX ON <PixelXLogo size={28} /></span>
             </button>
           </div>
         </div>

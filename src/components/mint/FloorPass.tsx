@@ -20,7 +20,7 @@ export function FloorPass({ gate, connected, onSwipe, mintedStr, supplyStr, rema
   const failed = gate === 'failed'
   const granted = gate === 'granted' || connected
   const photoRevealed = granted
-  const readerColor = granted ? '#6FBE44' : reading ? '#F5911E' : failed ? '#FF5A4E' : '#F5911E'
+  const readerColor = granted ? '#F5911E' : reading ? '#F5911E' : failed ? '#FF5A4E' : '#F5911E'
   const readerMsg = granted
     ? 'ACCESS GRANTED · WELCOME TO THE FLOOR'
     : reading
@@ -29,7 +29,7 @@ export function FloorPass({ gate, connected, onSwipe, mintedStr, supplyStr, rema
         ? 'CONNECTION FAILED · CLICK TO TRY AGAIN'
         : 'READER LOCKED · CLICK TO CONNECT WALLET'
   const clearance = granted ? 'APPROVED ✓' : reading ? 'CHECKING…' : failed ? 'DENIED ✕' : 'PENDING'
-  const clearColor = granted ? '#2E6B1E' : failed ? '#FF5A4E' : '#B5530A'
+  const clearColor = granted ? '#B4600C' : failed ? '#FF5A4E' : '#B5530A'
 
   return (
     <div>
@@ -83,10 +83,10 @@ export function FloorPass({ gate, connected, onSwipe, mintedStr, supplyStr, rema
           </div>
 
           {reading && (
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-[3px] animate-mintScan bg-[#6FBE44] [box-shadow:0_0_12px_#6FBE44]" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-[3px] animate-mintScan bg-[#F5911E] [box-shadow:0_0_12px_#F5911E]" />
           )}
           {granted && (
-            <div className="pointer-events-none absolute right-3 top-[18%] animate-mintStamp border-[3px] border-[#2E6B1E] bg-[#F7E7C1]/85 px-2 py-1 text-center font-pixelify text-[16px] font-bold leading-none text-[#2E6B1E]">
+            <div className="pointer-events-none absolute right-3 top-[18%] animate-mintStamp border-[3px] border-[#B4600C] bg-[#F7E7C1]/85 px-2 py-1 text-center font-pixelify text-[16px] font-bold leading-none text-[#B4600C]">
               ACCESS<br />GRANTED
             </div>
           )}
@@ -131,7 +131,7 @@ export function FloorPass({ gate, connected, onSwipe, mintedStr, supplyStr, rema
           onClick={() => setDetailsOpen(false)}
         >
           <div
-            className="w-full animate-mintSheetUp border-[3px] border-b-0 border-[#1F6B3A] bg-[#02060E] [background-image:radial-gradient(rgba(111,190,68,.08)_1px,transparent_1.5px)] [background-size:4px_4px] [box-shadow:0_0_0_4px_#15191E,0_0_50px_rgba(111,190,68,.3)]"
+            className="w-full animate-mintSheetUp border-[3px] border-b-0 border-[#A0520C] bg-[#02060E] [background-image:radial-gradient(rgba(245,145,30,.08)_1px,transparent_1.5px)] [background-size:4px_4px] [box-shadow:0_0_0_4px_#15191E,0_0_50px_rgba(245,145,30,.3)]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b-2 border-[#1B2F52] px-4 py-3">
@@ -152,7 +152,7 @@ export function FloorPass({ gate, connected, onSwipe, mintedStr, supplyStr, rema
               <button
                 type="button"
                 onClick={() => setDetailsOpen(false)}
-                className="w-full bg-[#6FBE44] py-2.5 font-pixelify text-[18px] font-bold text-[#02060E]"
+                className="w-full bg-[#F5911E] py-2.5 font-pixelify text-[18px] font-bold text-[#02060E]"
               >
                 GOT IT
               </button>

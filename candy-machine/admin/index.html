@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NasDucks Admin</title>
+    <style>
+      :root { color-scheme: dark; --bg: #02060e; --panel: #0b1220; --line: #1b2f52; --text: #f0e4cc; --dim: #7e97bd; --orange: #f5911e; --ok: #f5911e; --bad: #ff5a4e; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 ui-monospace, Menlo, monospace; }
+      main { max-width: 900px; margin: 0 auto; padding: 16px; }
+      h1 { margin: 0 0 4px; color: var(--orange); font-size: 22px; }
+      h2 { margin: 0 0 8px; font-size: 16px; color: var(--orange); }
+      section { background: var(--panel); border: 1px solid var(--line); padding: 14px; margin: 12px 0; }
+      button { background: var(--orange); color: #02060e; border: 0; padding: 8px 12px; font: inherit; font-weight: bold; cursor: pointer; margin: 4px 6px 4px 0; }
+      button.secondary { background: transparent; color: var(--orange); border: 1px solid var(--orange); }
+      button.danger { background: var(--bad); }
+      button:disabled { opacity: 0.4; cursor: not-allowed; }
+      select, input { background: var(--bg); color: var(--text); border: 1px solid var(--line); padding: 6px; font: inherit; }
+      .dim { color: var(--dim); }
+      .bad { color: var(--bad); }
+      .ok { color: var(--ok); }
+      table { border-collapse: collapse; width: 100%; }
+      td { padding: 3px 8px 3px 0; vertical-align: top; word-break: break-all; }
+      td:first-child { color: var(--dim); white-space: nowrap; width: 1%; }
+      #log { white-space: pre-wrap; max-height: 320px; overflow: auto; background: var(--bg); border: 1px solid var(--line); padding: 8px; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>NASDUCKS ADMIN</h1>
+      <div class="dim">Local only. The authority signs everything in Phantom; no keys are stored here.</div>
+
+      <section>
+        <h2>1. Network &amp; wallet</h2>
+        <label>Network <select id="cluster"><option value="devnet">devnet (rehearsal)</option><option value="mainnet">mainnet</option></select></label>
+        <button id="connect">Connect Phantom</button>
+        <table id="wallet"></table>
+      </section>
+
+      <section>
+        <h2>2. Launch settings</h2>
+        <table id="settings"></table>
+      </section>
+
+      <section>
+        <h2>3. Setup (run in order; each step is safe to re-run)</h2>
+        <table id="state"></table>
+        <button data-step="payment">a. Payment token account</button>
+        <button data-step="collection">b. Create collection</button>
+        <button data-step="otc">c. Create OTC machine</button>
+        <button data-step="public">d. Create public machine</button>
+        <button data-step="lines">e. Load ducks into machines</button>
+        <button data-step="verify" class="secondary">f. Verify everything</button>
+      </section>
+
+      <section>
+        <h2>4. Operate</h2>
+        <button data-step="flip-public">Flip OTC machine to public price</button>
+        <button data-step="flip-otc" class="secondary">Flip OTC machine back to holders-only</button>
+        <div style="margin-top: 8px">
+          <button data-step="close" class="danger">Close both machines (after sellout)</button>
+          <span class="dim">Refunds the machines' rent to the authority. Irreversible.</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Log</h2>
+        <div id="log"></div>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

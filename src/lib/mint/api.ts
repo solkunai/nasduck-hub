@@ -15,13 +15,23 @@ export interface MintStatus {
   prices: { mint: string | null; decimals: number | null; public: string | null; otc: string | null }
   /** Server time the numbers were read from chain (ISO). */
   refreshedAt: string
-  wallet?: { desksHeld: number; desksAvailable: number; lamports: number; tokenBalance: string }
+  wallet?: {
+    desksHeld: number
+    desksAvailable: number
+    /** Desks held by an unsent order (e.g. cancelled), back after holdUntil. */
+    desksOnHold: number
+    holdUntil: string | null
+    lamports: number
+    tokenBalance: string
+  }
 }
 
 export interface PreparedTx {
   kind: 'otc' | 'public'
   reservationId?: string
   assets: string[]
+  /** $NASDUCK base units this transaction charges, at the live quote. */
+  cost: string
   transaction: string // base64, signed by everything except the minter
 }
 
@@ -103,6 +113,8 @@ export function subscribeStats(onStats: (s: MintStats) => void, onLive: (live: b
 export const fetchStatus = (wallet?: string) => call<MintStatus>({ action: 'status', ...(wallet ? { wallet } : {}) })
 
 export const prepareMint = (wallet: string, otcQuantity: number, publicQuantity: number, auth?: WalletAuth) =>
-  call<{ transactions: PreparedTx[]; lastValidBlockHeight: number }>({ action: 'prepare', wallet, otcQuantity, publicQuantity, auth })
+  call<{ transactions: PreparedTx[]; lastValidBlockHeight: number; quote: { nasduckUsd: number; public: string; otc: string; decimals: number } }>({ action: 'prepare', wallet, otcQuantity, publicQuantity, auth })
+
+export const fetchOwned = (wallet: string) => call<{ ducks: SubmitResult['assets'] }>({ action: 'owned', wallet })
 
 export const submitMint = (transactions: string[]) => call<{ results: SubmitResult[] }>({ action: 'submit', transactions })
