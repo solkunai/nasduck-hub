@@ -4,6 +4,7 @@ import { useMarket } from '../providers/MarketProvider'
 import { MINT_LIVE, OTC_USD_PRICE_PER_MINT, SUPPLY, USD_PRICE_PER_MINT, fmt, pad, tierColor, tierForRank, type CollectionItem } from '../lib/mint/config'
 import {
   authMessage,
+  cancelMint,
   fetchOwned,
   fetchStatus,
   prepareMint,
@@ -387,7 +388,9 @@ export function useMintFlow() {
       setStage('idle')
     }
 
-    let otcReserved = false
+    // Orders built but not yet handed back for co-signing; voided if the
+    // buyer backs out, which frees any OTC desks immediately.
+    let unsent: string[] = []
     let latest: MintStatus
     try {
       latest = await fetchStatus(walletAddr)
@@ -448,15 +451,15 @@ export function useMintFlow() {
         const p = Math.min(pubLeft, MAX_PER_TIER_PER_BATCH)
         setStage('preparing')
         const prep = await prepareMint(walletAddr, o, p, o > 0 ? auth : undefined)
-        otcReserved = prep.transactions.some((t) => t.kind === 'otc')
+        unsent = prep.transactions.map((t) => t.token)
         setStage('signing')
         const signed = await wallet.signTransactions(
           prep.transactions.map((t) => fromBase64(t.transaction)),
           latest.cluster,
         )
         setStage('settling')
-        const { results } = await submitMint(signed.map(toBase64))
-        otcReserved = false
+        unsent = []
+        const { results } = await submitMint(signed.map((tx, i) => ({ token: prep.transactions[i].token, transaction: toBase64(tx) })))
         results.forEach((r, i) => {
           if (r.status === 'confirmed') {
             minted.push(...r.assets)
@@ -481,12 +484,10 @@ export function useMintFlow() {
         if (failures.length) break
       }
     } catch (e) {
+      // Anything built but never handed back can be voided right away.
+      if (unsent.length) await cancelMint(unsent).catch(() => {})
       if (isWalletRejection(e)) {
-        failures.push(
-          otcReserved
-            ? 'Cancelled in your wallet, nothing was charged. Your OTC Desk discounts are on hold for a moment and come back automatically.'
-            : 'Cancelled in your wallet, nothing was charged.',
-        )
+        failures.push('Cancelled in your wallet, nothing was charged.')
       } else {
         failures.push(e instanceof Error ? e.message : 'Something went wrong, nothing further was charged')
       }

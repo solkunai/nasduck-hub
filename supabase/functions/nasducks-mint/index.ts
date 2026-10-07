@@ -3,14 +3,15 @@ import { createUmi } from 'npm:@metaplex-foundation/umi-bundle-defaults@1.6.0'
 import {
   createNoopSigner,
   createSignerFromKeypair,
-  generateSigner,
   publicKey,
   signerIdentity,
+  signTransaction,
   some,
   transactionBuilder,
   type PublicKey,
   type Signer,
   type TransactionBuilder,
+  type TransactionMessage,
   type Umi,
 } from 'npm:@metaplex-foundation/umi@1.6.0'
 import { base58, base64, publicKey as publicKeySerializer } from 'npm:@metaplex-foundation/umi@1.6.0/serializers'
@@ -37,31 +38,52 @@ import { dynamicCorsHeaders } from '../_shared/cors.ts'
 //
 //   status   — supply/prices/open state (cached, see nasducks_mint_stats);
 //              with a wallet: OTC desks + balances
-//   prepare  — builds mint transactions (OTC part needs a signed wallet
-//              message), already signed by everything except the minter
-//   submit   — relays wallet-signed transactions (only ones that touch our
-//              machines), waits for confirmation, records OTC claims, and
-//              returns the minted ducks
+//   prepare  — builds mint transactions UNSIGNED (OTC part needs a signed
+//              wallet message) and records each as a one-time order, so the
+//              buyer's wallet signs first (Phantom's recommended order)
+//   submit   — checks each wallet-signed transaction against the order it
+//              came from, co-signs only if nothing but wallet safety checks
+//              was added, sends, confirms, records OTC claims, and returns
+//              the minted ducks
+//   cancel   — voids unsent orders (e.g. rejected in the wallet) and frees
+//              their OTC desks immediately
 //   confirm  — fallback: record OTC claims from signatures, chain-verified
 //   owned    — the NasDucks a wallet holds (for the "Your Ducks" gallery)
 //
 // Fails closed: any missing config/secret means nothing is signed or sent.
 
-const CLUSTER = Deno.env.get('OTC_CLUSTER') // 'devnet' | 'mainnet'
-const OTC_MACHINE = Deno.env.get('OTC_CANDY_MACHINE')
-const PUBLIC_MACHINE = Deno.env.get('PUBLIC_CANDY_MACHINE')
-const OTC_DESK_COLLECTION = Deno.env.get('OTC_DESK_COLLECTION')
-const SIGNER_SECRET = Deno.env.get('OTC_SIGNER_SECRET_KEY') // JSON byte array
-const MINT_SIGNER_SECRET = Deno.env.get('MINT_SIGNER_SECRET_KEY') // JSON byte array
+// A test deployment (nasducks-mint-devnet) sets NASDUCKS_ENV_PREFIX so it
+// reads only its own prefixed mint settings — never the live ones — and
+// shares just the infrastructure (Helius, database access).
+const ENV_PREFIX: string = (globalThis as { NASDUCKS_ENV_PREFIX?: string }).NASDUCKS_ENV_PREFIX ?? ''
+const IS_TEST_INSTANCE = ENV_PREFIX !== ''
+const setting = (name: string) => Deno.env.get(ENV_PREFIX + name)
+const CLUSTER = setting('OTC_CLUSTER') // 'devnet' | 'mainnet'
+const OTC_MACHINE = setting('OTC_CANDY_MACHINE')
+const PUBLIC_MACHINE = setting('PUBLIC_CANDY_MACHINE')
+const OTC_DESK_COLLECTION = setting('OTC_DESK_COLLECTION')
+const SIGNER_SECRET = setting('OTC_SIGNER_SECRET_KEY') // JSON byte array
+const MINT_SIGNER_SECRET = setting('MINT_SIGNER_SECRET_KEY') // JSON byte array
 // Launch switch: until MINT_OPEN is 'true', only wallets listed in
 // PRELAUNCH_WALLETS (comma-separated) can mint — e.g. for test mints.
-const MINT_OPEN = Deno.env.get('MINT_OPEN') === 'true'
-const PRELAUNCH_WALLETS = new Set((Deno.env.get('PRELAUNCH_WALLETS') ?? '').split(',').map((w) => w.trim()).filter(Boolean))
+const MINT_OPEN = setting('MINT_OPEN') === 'true'
+const PRELAUNCH_WALLETS = new Set((setting('PRELAUNCH_WALLETS') ?? '').split(',').map((w) => w.trim()).filter(Boolean))
 const HELIUS_API_KEY = Deno.env.get('HELIUS_API_KEY')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-const MAX_OTC_MINTS_PER_TX = 3 // measured: 4 exceeds Solana's 1232-byte limit with the memo
+// Wallets (Phantom) add their own safety-check instructions when they sign
+// first; leave room so they never have to skip them.
+const WALLET_HEADROOM_BYTES = 180
+const MAX_TX_BYTES = 1232 - WALLET_HEADROOM_BYTES
+const MAX_OTC_MINTS_PER_TX = 2 // 3 + memo + top-up leaves too little headroom
+// An order can be co-signed until shortly after its blockhash expires.
+const ORDER_TTL_SECONDS = 120
+// Instructions a wallet may add when it signs first; anything else voids it.
+const WALLET_ADDED_PROGRAMS = new Set([
+  'ComputeBudget111111111111111111111111111111', // fee / compute settings
+  'L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95', // Lighthouse (Phantom's balance assertions)
+])
 const MAX_PER_REQUEST = 30
 const MAX_SUBMIT = 20
 // Longer than a blockhash's lifetime (~60-90s), so an expired reservation's
@@ -86,6 +108,7 @@ const PRICE_WINDOW_MS = 5 * 60_000 // median window for the sanity check
 const PRICE_MAX_DEVIATION = 0.3 // pause if the price is >30% off the median
 const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
 const ATA_PROGRAM = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
+const UUID_ONLY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const UUID_RE = /nasducks-otc:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/
 
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void }
@@ -167,10 +190,37 @@ async function loadMachines(umi: Umi, otcSigner: Signer, mintSigner: Signer) {
 
 async function fetchJupiterUsd(): Promise<number> {
   const res = await fetch(`https://lite-api.jup.ag/price/v3?ids=${PRICE_MINT}`)
-  if (!res.ok) throw new Error(`price source HTTP ${res.status}`)
+  if (!res.ok) throw new Error(`jupiter HTTP ${res.status}`)
   const usd = Number((await res.json())?.[PRICE_MINT]?.usdPrice)
-  if (!Number.isFinite(usd) || usd <= 0) throw new Error('price source returned no price')
+  if (!Number.isFinite(usd) || usd <= 0) throw new Error('jupiter returned no price')
   return usd
+}
+
+// Fallback: the most liquid $NASDUCK pool on DexScreener (ignores thin pools,
+// whose prices can be off).
+async function fetchDexScreenerUsd(): Promise<number> {
+  const res = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${PRICE_MINT}`)
+  if (!res.ok) throw new Error(`dexscreener HTTP ${res.status}`)
+  const pairs = (await res.json()) as { baseToken?: { address?: string }; priceUsd?: string; liquidity?: { usd?: number } }[]
+  const best = pairs
+    .filter((p) => p.baseToken?.address === PRICE_MINT && (p.liquidity?.usd ?? 0) >= 5_000)
+    .sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0]
+  const usd = Number(best?.priceUsd)
+  if (!Number.isFinite(usd) || usd <= 0) throw new Error('dexscreener returned no price')
+  return usd
+}
+
+// Shared servers sometimes get rate-limited by one source: try Jupiter
+// (twice), then DexScreener.
+async function fetchNasduckUsd(): Promise<number> {
+  for (const source of [fetchJupiterUsd, fetchJupiterUsd, fetchDexScreenerUsd]) {
+    try {
+      return await source()
+    } catch (e) {
+      console.error('nasducks-mint price source failed:', e instanceof Error ? e.message : 'unknown')
+    }
+  }
+  throw new Error('all price sources failed')
 }
 
 // Live $NASDUCK/USD, sampled at most every PRICE_TTL_MS for all callers, and
@@ -191,7 +241,7 @@ async function nasduckUsd(db: SupabaseClient): Promise<number> {
     const { data: won } = await db.rpc('claim_price_refresh', { p_min_gap_seconds: PRICE_TTL_MS / 1000 })
     if (won) {
       try {
-        const usd = await fetchJupiterUsd()
+        const usd = await fetchNasduckUsd()
         await db.from('nasduck_price_samples').insert({ usd })
         await db.from('nasduck_price_samples').delete().lt('sampled_at', new Date(Date.now() - 86_400_000).toISOString())
       } catch (e) {
@@ -311,6 +361,7 @@ async function refreshStats(db: SupabaseClient, umi: Umi, signer: Signer, mintSi
     },
     refreshedAt: new Date().toISOString(),
   }
+  if (IS_TEST_INSTANCE) return stats // never write test numbers into the live page's snapshot
   const { error } = await db.from('nasducks_mint_stats').upsert({
     id: 1,
     cluster: stats.cluster,
@@ -332,6 +383,7 @@ async function refreshStats(db: SupabaseClient, umi: Umi, signer: Signer, mintSi
 // Serves the cached snapshot; only one caller per window re-reads the chain.
 // `force` (after a confirmed mint) shortens the window so counts move at once.
 async function currentStats(db: SupabaseClient, umi: Umi, signer: Signer, mintSigner: Signer, force = false): Promise<Stats> {
+  if (IS_TEST_INSTANCE) return refreshStats(db, umi, signer, mintSigner)
   const { data } = await db.from('nasducks_mint_stats').select('*').eq('id', 1).maybeSingle()
   const row = data && (data as StatsRow).cluster === CLUSTER ? (data as StatsRow) : null
   if (!row) return refreshStats(db, umi, signer, mintSigner)
@@ -438,10 +490,9 @@ function verifyWalletAuth(umi: Umi, wallet: PublicKey, auth: unknown) {
 
 // ------------------------------------------------------- transaction build
 
-type Prepared = { kind: 'otc' | 'public'; reservationId?: string; assets: string[]; cost: string; transaction: string }
+type Prepared = { kind: 'otc' | 'public'; token: string; reservationId?: string; assets: string[]; cost: string; transaction: string }
 
-function mintIx(umi: Umi, m: Machine, minter: Signer, machineSigner: Signer) {
-  const asset = generateSigner(umi)
+function mintIx(umi: Umi, m: Machine, minter: Signer, machineSigner: Signer, asset: Signer) {
   const pay = m.payment!
   const builder = mintV1(umi, {
     candyMachine: m.cm.publicKey,
@@ -457,9 +508,51 @@ function mintIx(umi: Umi, m: Machine, minter: Signer, machineSigner: Signer) {
   return { asset: asset.publicKey, builder }
 }
 
-async function finish(umi: Umi, builder: TransactionBuilder) {
-  const tx = await builder.buildAndSign(umi)
-  return base64.deserialize(umi.transactions.serialize(tx))[0]
+// Built but NOT signed: the buyer's wallet signs first, we co-sign at submit.
+function buildUnsigned(umi: Umi, builder: TransactionBuilder) {
+  const tx = builder.build(umi)
+  return { transaction: base64.deserialize(umi.transactions.serialize(tx))[0], message: base64.deserialize(tx.serializedMessage)[0] }
+}
+
+const fitsWithHeadroom = (umi: Umi, b: TransactionBuilder) => b.getTransactionSize(umi) <= MAX_TX_BYTES
+
+// Each new duck's address key is derived from the order token and a secret
+// only this function has, so it can be recreated at submit without storing
+// any key material.
+async function assetSigner(umi: Umi, secret: Uint8Array, token: string, i: number): Promise<Signer> {
+  const key = await crypto.subtle.importKey('raw', new Uint8Array(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const seed = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`nasducks-asset:${token}:${i}`)))
+  return createSignerFromKeypair(umi, umi.eddsa.createKeypairFromSeed(seed))
+}
+
+// Instructions resolved to (program, accounts with signer/writable flags,
+// data) so two messages can be compared regardless of account ordering.
+function resolvedInstructions(msg: TransactionMessage): string[] | null {
+  if (msg.addressLookupTables.length) return null
+  const { numRequiredSignatures: s, numReadonlySignedAccounts: rs, numReadonlyUnsignedAccounts: ru } = msg.header
+  const n = msg.accounts.length
+  const meta = (i: number) => {
+    const signer = i < s
+    const writable = signer ? i < s - rs : i < n - ru
+    return `${msg.accounts[i]}:${signer ? 1 : 0}${writable ? 1 : 0}`
+  }
+  return msg.instructions.map((ix) => `${msg.accounts[ix.programIndex]}|${ix.accountIndexes.map(meta).join(',')}|${base64.deserialize(ix.data)[0]}`)
+}
+
+// True if `signed` is the order we built, with at most wallet safety-check
+// instructions added (and nothing removed, changed, or reordered).
+function sameOrder(built: TransactionMessage, signed: TransactionMessage): boolean {
+  if (signed.blockhash !== built.blockhash || String(signed.accounts[0]) !== String(built.accounts[0])) return false
+  const a = resolvedInstructions(built)
+  const b = resolvedInstructions(signed)
+  if (!a || !b) return false
+  let j = 0
+  for (const ix of b) {
+    if (j < a.length && ix === a[j]) j++
+    else if (!WALLET_ADDED_PROGRAMS.has(ix.split('|')[0])) return false
+  }
+  const signers = (m: TransactionMessage) => m.accounts.slice(0, m.header.numRequiredSignatures).map(String).sort().join(',')
+  return j === a.length && signers(built) === signers(signed)
 }
 
 // Spreads n public mints across the open public pools, weighted by how many
@@ -488,7 +581,7 @@ Deno.serve(async (req) => {
 
   try {
     if (
-      !CLUSTER || !['devnet', 'mainnet'].includes(CLUSTER) || !OTC_MACHINE || !PUBLIC_MACHINE || !OTC_DESK_COLLECTION ||
+      !CLUSTER || !['devnet', 'mainnet'].includes(CLUSTER) || (IS_TEST_INSTANCE && CLUSTER !== 'devnet') || !OTC_MACHINE || !PUBLIC_MACHINE || !OTC_DESK_COLLECTION ||
       !SIGNER_SECRET || !MINT_SIGNER_SECRET || !HELIUS_API_KEY || !SUPABASE_URL || !SERVICE_ROLE_KEY
     ) {
       return json({ error: 'mint not configured' }, 503, cors)
@@ -511,7 +604,9 @@ Deno.serve(async (req) => {
     const umi = createUmi(heliusUrl()).use(mplCore()).use(mplCandyMachine())
     const signer = createSignerFromKeypair(umi, umi.eddsa.createKeypairFromSecretKey(new Uint8Array(JSON.parse(SIGNER_SECRET))))
     umi.use(signerIdentity(signer))
-    const mintSigner = createSignerFromKeypair(umi, umi.eddsa.createKeypairFromSecretKey(new Uint8Array(JSON.parse(MINT_SIGNER_SECRET))))
+    const mintSecret = new Uint8Array(JSON.parse(MINT_SIGNER_SECRET))
+    const mintSigner = createSignerFromKeypair(umi, umi.eddsa.createKeypairFromSecretKey(mintSecret))
+    const assetSecret = mintSecret.slice(0, 32)
 
     // ------------------------------------------------------------- status
     if (body.action === 'status') {
@@ -579,6 +674,17 @@ Deno.serve(async (req) => {
 
       const { otc, otcOpen, publicPools } = await loadMachines(umi, signer, mintSigner)
       const minter = createNoopSigner(wallet)
+      // Records a built order so its wallet-signed version can be co-signed once.
+      const recordOrder = async (token: string, message: string, reservationId?: string) => {
+        const { error } = await db.from('nasducks_prepared').insert({
+          token,
+          wallet,
+          message,
+          reservation_id: reservationId ?? null,
+          expires_at: new Date(Date.now() + ORDER_TTL_SECONDS * 1000).toISOString(),
+        })
+        if (error) throw new Error('could not record order')
+      }
 
       // Eligibility first (clearest error), then price and balance, then reserve.
       let desks: string[] = []
@@ -635,10 +741,11 @@ Deno.serve(async (req) => {
           if (!rows.length) break
           const reservationId = rows[0].reservation_id
           try {
+            const token = crypto.randomUUID()
             let builder = transactionBuilder()
             const assets: string[] = []
             for (let i = 0; i < rows.length; i++) {
-              const m = mintIx(umi, otc, minter, signer)
+              const m = mintIx(umi, otc, minter, signer, await assetSigner(umi, assetSecret, token, i))
               assets.push(m.asset)
               builder = builder.add(m.builder)
             }
@@ -656,7 +763,9 @@ Deno.serve(async (req) => {
               })
               .setFeePayer(minter)
               .setBlockhash({ blockhash, lastValidBlockHeight })
-            transactions.push({ kind: 'otc', reservationId, assets, cost: (BigInt(rows.length) * perMint(otc, 'otc')).toString(), transaction: await finish(umi, builder) })
+            const built = buildUnsigned(umi, builder)
+            await recordOrder(token, built.message, reservationId)
+            transactions.push({ kind: 'otc', token, reservationId, assets, cost: (BigInt(rows.length) * perMint(otc, 'otc')).toString(), transaction: built.transaction })
           } catch (e) {
             await db.rpc('release_otc_reservation', { p_reservation: reservationId })
             throw e
@@ -674,21 +783,25 @@ Deno.serve(async (req) => {
         for (const pool of new Set(assigned)) {
           let count = assigned.filter((p) => p === pool).length
           while (count > 0) {
+            const token = crypto.randomUUID()
             let builder = transactionBuilder().setFeePayer(minter).setBlockhash({ blockhash, lastValidBlockHeight })
             const assets: string[] = []
-            // Leave room for the top-up transfer (same size whatever the amount).
+            // Leave room for the top-up transfer (same size whatever the amount)
+            // and for the safety checks the wallet adds when it signs.
             const withTopUp = (b: TransactionBuilder) => b.add(topUpIx(umi, wallet, pool.payment!, decimals, 1n))
             while (count > 0) {
-              const m = mintIx(umi, pool, minter, mintSigner)
+              const m = mintIx(umi, pool, minter, mintSigner, await assetSigner(umi, assetSecret, token, assets.length))
               const next = builder.add(m.builder)
-              if (assets.length > 0 && !withTopUp(next).fitsInOneTransaction(umi)) break
+              if (assets.length > 0 && !fitsWithHeadroom(umi, withTopUp(next))) break
               builder = next
               assets.push(m.asset)
               count--
             }
             const extra = topUp(pool, 'public', assets.length)
             if (extra > 0n) builder = builder.add(topUpIx(umi, wallet, pool.payment!, decimals, extra))
-            transactions.push({ kind: 'public', assets, cost: (BigInt(assets.length) * perMint(pool, 'public')).toString(), transaction: await finish(umi, builder) })
+            const built = buildUnsigned(umi, builder)
+            await recordOrder(token, built.message)
+            transactions.push({ kind: 'public', token, assets, cost: (BigInt(assets.length) * perMint(pool, 'public')).toString(), transaction: built.transaction })
           }
         }
       }
@@ -702,39 +815,76 @@ Deno.serve(async (req) => {
 
     // ------------------------------------------------------------- submit
     if (body.action === 'submit') {
-      const txs = body.transactions
-      if (!Array.isArray(txs) || !txs.length || txs.length > MAX_SUBMIT || !txs.every((t) => typeof t === 'string' && t.length < 4000)) {
-        throw new HttpError(400, `transactions must be a list of up to ${MAX_SUBMIT} signed transactions`)
+      const items = body.transactions
+      if (
+        !Array.isArray(items) || !items.length || items.length > MAX_SUBMIT ||
+        !items.every((t) => t && typeof t === 'object' && typeof t.token === 'string' && typeof t.transaction === 'string' && t.transaction.length < 4000)
+      ) {
+        throw new HttpError(400, `transactions must be a list of up to ${MAX_SUBMIT} signed orders`)
       }
 
       // Results come back in the same order the transactions were submitted.
       type Sent = { signature: string; status: 'confirmed' | 'failed'; reason?: string; assets: { address: string; name: string; uri: string }[] }
-      const results: Sent[] = new Array(txs.length)
+      const results: Sent[] = new Array(items.length)
       const pending: { index: number; signature: string; sigBytes: Uint8Array; reservationId?: string; assets: string[] }[] = []
+      const refuse = async (index: number, reason: string, reservationId?: string | null) => {
+        if (reservationId) await db.rpc('release_otc_reservation', { p_reservation: reservationId })
+        results[index] = { signature: '', status: 'failed', reason, assets: [] }
+      }
 
-      for (const [index, t] of (txs as string[]).entries()) {
+      for (const [index, item] of (items as { token: string; transaction: string }[]).entries()) {
+        if (!UUID_ONLY_RE.test(item.token)) {
+          results[index] = { signature: '', status: 'failed', reason: 'unknown order', assets: [] }
+          continue
+        }
+        // Each order can be co-signed once, and only while still valid.
+        const { data: taken } = await db.rpc('take_prepared_order', { p_token: item.token, p_state: 'submitted' })
+        const order = (taken as { wallet: string; message: string; reservation_id: string | null }[] | null)?.[0]
+        if (!order) {
+          results[index] = { signature: '', status: 'failed', reason: 'order expired or already used, please try again', assets: [] }
+          continue
+        }
         let tx
         try {
-          tx = umi.transactions.deserialize(base64.serialize(t))
+          tx = umi.transactions.deserialize(base64.serialize(item.transaction))
         } catch {
-          throw new HttpError(400, 'invalid transaction')
+          await refuse(index, 'invalid transaction', order.reservation_id)
+          continue
         }
-        const keys = tx.message.accounts.map(String)
-        // Only relay mints against our own machines: this is not an open relay.
-        if (!keys.includes(OTC_MACHINE) && !keys.includes(PUBLIC_MACHINE)) throw new HttpError(400, 'not a NasDucks mint transaction')
-        const signerKeys = keys.slice(0, tx.message.header.numRequiredSignatures)
-        const memoIx = tx.message.instructions.find((ix) => keys[ix.programIndex] === MEMO_PROGRAM)
-        const memo = memoIx ? new TextDecoder().decode(memoIx.data) : ''
-        const reservationId = signerKeys.includes(signer.publicKey) ? UUID_RE.exec(memo)?.[1] : undefined
-        // New mint assets are the extra signers (not the fee payer, not our signer).
+        const built = umi.transactions.deserializeMessage(base64.serialize(order.message))
+        // Must be exactly the order we built (wallet safety checks aside),
+        // paid for and signed by the wallet it was built for.
+        const payer = String(tx.message.accounts[0])
+        const payerSig = tx.signatures[0]
+        if (
+          !sameOrder(built, tx.message) || payer !== order.wallet ||
+          !payerSig || payerSig.every((b) => b === 0) || !umi.eddsa.verify(tx.serializedMessage, payerSig, publicKey(payer))
+        ) {
+          console.error('nasducks-mint refused a modified or unsigned order', item.token)
+          await refuse(index, 'transaction does not match your order, please try again', order.reservation_id)
+          continue
+        }
+        // Co-sign: each new duck's derived key, plus our approval signer.
+        const signerKeys = tx.message.accounts.slice(0, tx.message.header.numRequiredSignatures).map(String)
         const assets = signerKeys.slice(1).filter((k) => k !== signer.publicKey && k !== mintSigner.publicKey)
+        const coSigners: Signer[] = []
+        for (let i = 0; i < assets.length; i++) coSigners.push(await assetSigner(umi, assetSecret, item.token, i))
+        if (coSigners.some((c) => !assets.includes(c.publicKey))) {
+          await refuse(index, 'transaction does not match your order, please try again', order.reservation_id)
+          continue
+        }
+        if (signerKeys.includes(signer.publicKey)) coSigners.push(signer)
+        if (signerKeys.includes(mintSigner.publicKey)) coSigners.push(mintSigner)
+        const signed = await signTransaction(tx, coSigners)
         try {
-          const sigBytes = await umi.rpc.sendTransaction(tx, { commitment: 'confirmed' })
-          pending.push({ index, signature: base58.deserialize(sigBytes)[0], sigBytes, reservationId, assets })
+          const sigBytes = await umi.rpc.sendTransaction(signed, { commitment: 'confirmed' })
+          pending.push({ index, signature: base58.deserialize(sigBytes)[0], sigBytes, reservationId: order.reservation_id ?? undefined, assets })
         } catch (e) {
           const msg = e instanceof Error ? e.message : ''
           const reason = /insufficient|0x1\b/i.test(msg) ? 'insufficient balance' : /blockhash/i.test(msg) ? 'expired, try again' : 'transaction failed'
           console.error('nasducks-mint send failed:', scrub(msg).slice(0, 300))
+          // It may still have reached the network (e.g. a timeout), so the desk
+          // stays held until expiry, when the chain check settles it.
           results[index] = { signature: '', status: 'failed', reason, assets: [] }
         }
       }
@@ -785,6 +935,25 @@ Deno.serve(async (req) => {
         EdgeRuntime.waitUntil(currentStats(db, umi, signer, mintSigner, true).catch(() => {}))
       }
       return json({ results }, 200, cors)
+    }
+
+    // ------------------------------------------------------------- cancel
+    // Voids orders the buyer rejected in their wallet. A voided order can never
+    // be co-signed, so it can never land — its OTC desks are freed at once.
+    if (body.action === 'cancel') {
+      const tokens = body.tokens
+      if (!Array.isArray(tokens) || tokens.length > MAX_SUBMIT || !tokens.every((t) => typeof t === 'string' && UUID_ONLY_RE.test(t))) {
+        throw new HttpError(400, 'tokens must be a list of order tokens')
+      }
+      let cancelled = 0
+      for (const token of tokens as string[]) {
+        const { data } = await db.rpc('take_prepared_order', { p_token: token, p_state: 'cancelled' })
+        const order = (data as { reservation_id: string | null }[] | null)?.[0]
+        if (!order) continue
+        cancelled++
+        if (order.reservation_id) await db.rpc('release_otc_reservation', { p_reservation: order.reservation_id })
+      }
+      return json({ cancelled }, 200, cors)
     }
 
     // ------------------------------------------------------------ confirm

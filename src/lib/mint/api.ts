@@ -28,11 +28,14 @@ export interface MintStatus {
 
 export interface PreparedTx {
   kind: 'otc' | 'public'
+  /** One-time order number: the backend co-signs this order once, after
+   *  checking the wallet-signed transaction matches it. */
+  token: string
   reservationId?: string
   assets: string[]
   /** $NASDUCK base units this transaction charges, at the live quote. */
   cost: string
-  transaction: string // base64, signed by everything except the minter
+  transaction: string // base64, unsigned: the wallet signs first
 }
 
 export interface SubmitResult {
@@ -117,4 +120,7 @@ export const prepareMint = (wallet: string, otcQuantity: number, publicQuantity:
 
 export const fetchOwned = (wallet: string) => call<{ ducks: SubmitResult['assets'] }>({ action: 'owned', wallet })
 
-export const submitMint = (transactions: string[]) => call<{ results: SubmitResult[] }>({ action: 'submit', transactions })
+export const submitMint = (transactions: { token: string; transaction: string }[]) => call<{ results: SubmitResult[] }>({ action: 'submit', transactions })
+
+/** Voids unsent orders (e.g. rejected in the wallet); frees their OTC desks at once. */
+export const cancelMint = (tokens: string[]) => call<{ cancelled: number }>({ action: 'cancel', tokens })
