@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMarket } from '../providers/MarketProvider'
 import { NASDUCK_MINT } from '../lib/nasduck'
 import { formatPrice, formatPercent } from '../lib/format'
@@ -40,6 +41,12 @@ export function Hero() {
           >
             BUY $NASDUCK <span className="font-mono text-[13px] opacity-70">↓ JUP</span>
           </a>
+          <Link
+            to="/mint"
+            className="flex items-center gap-2.5 rounded-[10px] bg-brand px-6 py-4 font-display text-[17px] text-bg transition-all hover:-translate-y-0.5 hover:bg-brand-hover"
+          >
+            🦆 MINT NASDUCK NFT
+          </Link>
           <div className="flex min-w-[190px] flex-col justify-center rounded-[10px] border border-line bg-panel px-[18px] py-[11px]">
             <div className="font-mono text-[10px] tracking-wide text-ink-faint">PRICE</div>
             <div className="flex items-baseline gap-2.5">

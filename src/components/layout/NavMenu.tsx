@@ -5,6 +5,7 @@ const LINKS = [
   { href: '#swap', icon: '🎯', label: 'BUY $NASDUCK' },
   { href: '#tap-the-duck', icon: '🦆', label: 'TAP THE DUCK' },
   { href: '#memes', icon: '😂', label: 'MEMES' },
+  { href: '/mint', icon: '🖼️', label: 'MINT NFT' },
 ]
 
 // One menu, not a separate mobile/desktop implementation — a small icon
@@ -22,6 +23,12 @@ export function NavMenu() {
   // the hash instead when elsewhere.
   function handleClick(e: React.MouseEvent, href: string) {
     setOpen(false)
+    // Page routes (e.g. /mint) go through the router, not a full reload.
+    if (href.startsWith('/')) {
+      e.preventDefault()
+      navigate(href)
+      return
+    }
     if (!onLanding) {
       e.preventDefault()
       navigate(`/${href}`)
