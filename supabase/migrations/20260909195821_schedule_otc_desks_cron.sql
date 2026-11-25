@@ -11,7 +11,7 @@ select cron.schedule(
   '*/10 * * * *',
   $$
   select net.http_post(
-    url := 'https://qrqenowwwccmfgwsnfpa.supabase.co/functions/v1/snapshot-otc-desks',
+    url := 'https://oqdpafkbbyyupmxmlqmj.supabase.co/functions/v1/snapshot-otc-desks',
     headers := '{"x-cron-secret": "REPLACE_WITH_OTC_CRON_SECRET", "content-type": "application/json"}'::jsonb,
     body := '{}'::jsonb
   );

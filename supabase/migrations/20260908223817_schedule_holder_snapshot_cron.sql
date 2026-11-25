@@ -15,7 +15,7 @@ select cron.schedule(
   '*/5 * * * *',
   $$
   select net.http_post(
-    url := 'https://qrqenowwwccmfgwsnfpa.supabase.co/functions/v1/snapshot-holders',
+    url := 'https://oqdpafkbbyyupmxmlqmj.supabase.co/functions/v1/snapshot-holders',
     headers := '{"x-cron-secret": "REPLACE_WITH_CRON_SECRET", "content-type": "application/json"}'::jsonb,
     body := '{}'::jsonb
   );

@@ -43,8 +43,8 @@ export const REFERRAL_ACCOUNT = 'HszE2CwtT7buhNhxHqJUcj2iSXimRywzTuqnR5HgdGJ4'
 // a fresh deploy (Vercel or otherwise) works without a required dashboard
 // env var step, same convention as REFERRAL_ACCOUNT/FEE_WALLET above;
 // VITE_SUPABASE_* still overrides these if set.
-export const SUPABASE_URL = 'https://qrqenowwwccmfgwsnfpa.supabase.co'
-export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_8in3GY7CIf71OL_PUZv_-Q_JIXeKa4q'
+export const SUPABASE_URL = 'https://oqdpafkbbyyupmxmlqmj.supabase.co'
+export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_x57vObl_pMxzj0dcXWf7WA_0o8fPAVd'
 
 export const MCAP_GOAL = 1_000_000_000
 export const HOLDER_GOAL = 100_000
